@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IzentBet → SportyBet / Bet9ja Converter | Admin Tool</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0f12;
+      --surface: #161920;
+      --surface2: #1e2229;
+      --border: #2a2f3a;
+      --border2: #3a4050;
+      --text: #e8eaf0;
+      --muted: #7a8299;
+      --accent: #00e5a0;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --info: #60a5fa;
+    }
+
+    body {
+      font-family: 'IBM Plex Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ─── Header ──────────────────────────────────── */
+    .header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 28px; height: 56px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .admin-badge {
+      font-family: 'Syne', sans-serif;
+      background: var(--accent); color: #0d0f12;
+      font-size: 11px; font-weight: 700; padding: 3px 10px;
+      border-radius: 20px; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .header-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 16px; font-weight: 700; color: var(--text);
+    }
+    .header-right {
+      font-size: 12px; color: var(--muted);
+    }
+
+    /* ─── Main ────────────────────────────────────── */
+    .main {
+      max-width: 960px; margin: 0 auto;
+      padding: 96px 24px 60px;
+    }
+
+    /* ─── Section labels ──────────────────────────── */
+    .section-label {
+      font-family: 'Syne', sans-serif;
+      font-size: 14px; font-weight: 700; color: var(--text);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 16px; display: flex; align-items: center; gap: 10px;
+    }
+    .section-tag {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px; color: var(--muted); background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 2px 8px; text-transform: lowercase; font-weight: 400;
+    }
+
+    /* ─── How it works ────────────────────────────── */
+    .how-row {
+      display: flex; gap: 16px; margin-bottom: 36px;
+    }
+    .how-card {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 20px;
+    }
+    .how-step-num {
+      font-family: 'Syne', sans-serif;
+      font-size: 11px; font-weight: 700; color: var(--accent);
+      text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;
+    }
+    .how-step-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 6px;
+    }
+    .how-step-desc {
+      font-size: 12px; color: var(--muted); line-height: 1.5;
+    }
+
+    /* ─── Step indicator ──────────────────────────── */
+    .steps-row {
+      display: flex; align-items: center; justify-content: center;
+      gap: 0; margin-bottom: 36px;
+    }
+    .step {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .step-circle {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
+      border: 2px solid var(--border2); color: var(--muted); background: transparent;
+      transition: all 0.3s;
+    }
+    .step-text {
+      font-size: 12px; color: var(--muted); font-weight: 500;
+      transition: color 0.3s;
+    }
+    .step-line {
+      width: 48px; height: 2px; background: var(--border2); margin: 0 8px;
+      transition: background 0.3s;
+    }
+    .step.active .step-circle { border-color: var(--accent); color: var(--accent); }
+    .step.active .step-text { color: var(--accent); }
+    .step.done .step-circle {
+      border-color: var(--accent); background: var(--accent); color: #0d0f12;
+    }
+    .step.done .step-text { color: var(--accent); }
+    .step.done + .step-line { background: var(--accent); }
+
+    /* ─── Panels ──────────────────────────────────── */
+    .panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 24px; margin-bottom: 24px;
+    }
+
+    /* ─── Config grid ─────────────────────────────── */
+    .config-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      margin-bottom: 16px;
+    }
+    .field label {
+      font-family: 'Syne', sans-serif;
+      display: block; font-size: 11px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%; padding: 10px 14px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text);
+      font-family: 'IBM Plex Mono', monospace; font-size: 13px;
+      outline: none; transition: border-color 0.2s;
+    }
+    .field input:focus { border-color: var(--accent); }
+    .field input::placeholder { color: var(--muted); opacity: 0.6; }
+
+    .info-notice {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: rgba(0,229,160,0.06); border: 1px solid rgba(0,229,160,0.15);
+      border-radius: 6px; padding: 12px 16px;
+      font-size: 12px; color: var(--accent); line-height: 1.5;
+    }
+    .info-notice::before { content: 'ℹ'; font-size: 14px; flex-shrink: 0; }
+
+    /* ─── Convert panel ───────────────────────────── */
+    .platform-toggle {
+      display: flex; gap: 0; margin-bottom: 16px;
+    }
+    .platform-btn {
+      flex: 1; padding: 12px 16px;
+      font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
+      letter-spacing: 0.04em; cursor: pointer; border: 1px solid var(--border2);
+      background: transparent; color: var(--muted); transition: all 0.2s;
+      text-align: center;
+    }
+    .platform-btn:first-child { border-radius: 8px 0 0 8px; }
+    .platform-btn:last-child { border-radius: 0 8px 8px 0; border-left: none; }
+    .platform-btn.active {
+      background: var(--accent); color: #0d0f12; border-color: var(--accent);
+    }
+    .platform-btn:not(.active):hover {
+      border-color: var(--accent); color: var(--accent);
+    }
+
+    .booking-input {
+      width: 100%; padding: 14px 18px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 18px; letter-spacing: 0.12em;
+      text-transform: uppercase; outline: none;
+      margin-bottom: 16px; transition: border-color 0.2s;
+    }
+    .booking-input:focus { border-color: var(--accent); }
+    .booking-input::placeholder { color: var(--muted); opacity: 0.5; text-transform: none; }
+
+    .btn-row { display: flex; gap: 10px; margin-bottom: 20px; }
+
+    .btn {
+      font-family: 'Syne', sans-serif;
+      font-size: 13px; font-weight: 700; padding: 10px 24px;
+      border-radius: 6px; cursor: pointer; border: none;
+      transition: all 0.2s; letter-spacing: 0.04em;
+    }
+    .btn-primary {
+      background: var(--accent); color: #0d0f12;
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-secondary {
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border2);
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ─── Status bar ──────────────────────────────── */
+    .status-bar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; border-radius: 6px;
+      background: var(--surface2); border-left: 3px solid var(--border2);
+      font-size: 13px; margin-bottom: 0;
+      transition: border-color 0.3s;
+    }
+    .status-bar.hidden { display: none; }
+    .status-bar.loading { border-left-color: var(--info); }
+    .status-bar.success { border-left-color: var(--accent); }
+    .status-bar.error { border-left-color: var(--danger); }
+
+    .spinner {
+      width: 16px; height: 16px; border: 2px solid var(--border2);
+      border-top-color: var(--info); border-radius: 50%;
+      animation: spin 0.7s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Selections table ────────────────────────── */
+    .hidden { display: none !important; }
+
+    .sel-table {
+      width: 100%; border-collapse: collapse;
+    }
+    .sel-table th {
+      font-family: 'Syne', sans-serif;
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      text-align: left; padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sel-table td {
+      padding: 12px; border-bottom: 1px solid var(--border);
+      font-size: 13px; vertical-align: middle;
+    }
+    .sel-table tr:last-child td { border-bottom: none; }
+
+    .match-name { font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .match-date { font-size: 11px; color: var(--muted); }
+    .market-cell { color: var(--muted); font-size: 12px; }
+    .odds-cell { color: var(--warn); font-weight: 600; }
+
+    .pick-badge {
+      display: inline-block; background: rgba(0,229,160,0.12);
+      color: var(--accent); padding: 3px 10px; border-radius: 4px;
+      font-size: 12px; font-weight: 600;
+    }
+
+    .status-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 4px;
+      font-size: 11px; font-weight: 600;
+    }
+    .status-badge.pending { background: rgba(245,158,11,0.12); color: var(--warn); }
+    .status-badge.matched { background: rgba(0,229,160,0.12); color: var(--accent); }
+    .status-badge.failed { background: rgba(239,68,68,0.12); color: var(--danger); }
+
+    .count-badge {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px; color: var(--muted); background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 2px 8px; margin-left: 8px;
+    }
+
+    /* ─── Result panel ────────────────────────────── */
+    .result-code {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 30px; font-weight: 600; color: var(--accent);
+      letter-spacing: 0.18em; text-align: center;
+      padding: 24px 0 20px;
+    }
+    .result-btns {
+      display: flex; justify-content: center; gap: 12px; margin-bottom: 20px;
+    }
+    .result-meta {
+      display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .meta-item { text-align: center; }
+    .meta-key { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .meta-val { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 2px; }
+
+    /* ─── Log window ──────────────────────────────── */
+    .log-window {
+      max-height: 180px; overflow-y: auto;
+      font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 14px 16px;
+      line-height: 1.7;
+    }
+    .log-window div { white-space: pre-wrap; word-break: break-all; }
+    .log-info { color: var(--info); }
+    .log-ok { color: var(--accent); }
+    .log-warn { color: var(--warn); }
+    .log-err { color: var(--danger); }
+
+    /* ─── Reference (docs) ────────────────────────── */
+    .ref-json {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 16px; overflow-x: auto;
+      font-size: 12px; line-height: 1.6;
+    }
+    .json-key { color: var(--warn); }
+    .json-str { color: var(--accent); }
+    .json-num { color: var(--info); }
+
+    .ref-table {
+      width: 100%; border-collapse: collapse; margin-top: 16px;
+    }
+    .ref-table th, .ref-table td {
+      text-align: left; padding: 10px 14px;
+      border-bottom: 1px solid var(--border); font-size: 13px;
+    }
+    .ref-table th {
+      font-family: 'Syne', sans-serif;
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+
+    /* ─── Responsive ──────────────────────────────── */
+    @media (max-width: 620px) {
+      .config-grid { grid-template-columns: 1fr; }
+      .steps-row { display: none; }
+      .header { padding: 0 14px; }
+      .header-title { font-size: 13px; }
+      .header-right { font-size: 10px; }
+      .main { padding: 72px 14px 36px; }
+      .panel { padding: 14px; }
+      .how-row { flex-direction: column; }
+      .result-code { font-size: 22px; }
+      .btn-row { flex-wrap: wrap; }
+      .result-meta { gap: 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ Header ═══ -->
+<div class="header">
+  <div class="header-left">
+    <span class="admin-badge">ADMIN</span>
+    <span class="header-title">Booking Code Converter</span>
+  </div>
+  <div class="header-right">IzentBet → SportyBet / Bet9ja &nbsp;|&nbsp; Internal Tool</div>
+</div>
+
+<div class="main">
+
+  <!-- ═══ How it works ═══ -->
+  <div class="section-label">How it works</div>
+  <div class="how-row">
+    <div class="how-card">
+      <div class="how-step-num">Step 1</div>
+      <div class="how-step-title">Fetch from IzentBet</div>
+      <div class="how-step-desc">Calls real API, decodes selections from the booking code</div>
+    </div>
+    <div class="how-card">
+      <div class="how-step-num">Step 2</div>
+      <div class="how-step-title">Match on SportyBet</div>
+      <div class="how-step-desc">Searches by team name + kick-off date with fallback strategy</div>
+    </div>
+    <div class="how-card">
+      <div class="how-step-num">Step 3</div>
+      <div class="how-step-title">Generate Code</div>
+      <div class="how-step-desc">Posts matched selections to SportyBet share endpoint</div>
+    </div>
+  </div>
+
+  <!-- ═══ Step indicator ═══ -->
+  <div class="steps-row">
+    <div class="step active" id="step1">
+      <div class="step-circle">1</div>
+      <div class="step-text">Input Code</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step" id="step2">
+      <div class="step-circle">2</div>
+      <div class="step-text">Fetch Selections</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step" id="step3">
+      <div class="step-circle">3</div>
+      <div class="step-text">Match Events</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step" id="step4">
+      <div class="step-circle">4</div>
+      <div class="step-text">Generate Code</div>
+    </div>
+  </div>
+
+  <!-- ═══ Configuration ═══ -->
+  <div class="panel">
+    <div class="section-label">Configuration <span class="section-tag">required once</span></div>
+    <div class="config-grid">
+      <div class="field">
+        <label>This Server URL</label>
+        <input type="text" id="serverUrl" value="http://localhost:3001" />
+      </div>
+      <div class="field">
+        <label>Admin API Key</label>
+        <input type="text" id="adminKey" placeholder="your ADMIN_API_KEY from .env" />
+      </div>
+      <div class="field">
+        <label>SportyBet Country</label>
+        <input type="text" id="sportyCountry" value="ng" />
+      </div>
+      <div class="field">
+        <label>Match Tolerance (hours)</label>
+        <input type="text" id="tolerance" value="3" />
+      </div>
+    </div>
+
+    <div style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+      <div class="section-label" style="margin-bottom:12px;">AI API Keys <span class="section-tag">optional — enables AI fallback</span></div>
+      <div class="config-grid">
+        <div class="field">
+          <label>OpenAI Key</label>
+          <input type="password" id="aiKeyOpenai" placeholder="sk-..." autocomplete="off" />
+        </div>
+        <div class="field">
+          <label>Gemini Key</label>
+          <input type="password" id="aiKeyGemini" placeholder="AIza..." autocomplete="off" />
+        </div>
+        <div class="field">
+          <label>Grok (xAI) Key</label>
+          <input type="password" id="aiKeyGrok" placeholder="xai-..." autocomplete="off" />
+        </div>
+        <div class="field" style="display:flex; align-items:flex-end;">
+          <button class="btn btn-secondary" onclick="syncAiKeys()" style="width:100%;">Save &amp; Sync Keys</button>
+        </div>
+      </div>
+      <div id="aiKeysNotice" class="info-notice" style="margin-top:8px;">Add any AI key to enable the AI fallback market resolver. Keys are saved in your browser.</div>
+    </div>
+  </div>
+
+  <!-- ═══ Convert ═══ -->
+  <div class="panel">
+    <div class="section-label">Convert Booking Code</div>
+    <div class="platform-toggle">
+      <button class="platform-btn active" id="platformSporty" onclick="setPlatform('sportybet')">SportyBet NG</button>
+      <button class="platform-btn" id="platformBet9ja" onclick="setPlatform('bet9ja')">Bet9ja</button>
+    </div>
+    <input type="text" class="booking-input" id="bookingInput" placeholder="Enter IzentBet code  e.g. 955670" />
+    <div class="btn-row">
+      <button class="btn btn-primary" id="convertBtn" onclick="startConversion()">→ Convert Code</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+      <button class="btn btn-secondary" onclick="runDemo()">Run Demo</button>
+    </div>
+    <div style="margin-top:10px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:12px; color:var(--muted);">AI Fallback</span>
+        <label style="position:relative; display:inline-block; width:36px; height:20px; cursor:pointer;">
+          <input type="checkbox" id="aiToggle" checked style="opacity:0; width:0; height:0;" />
+          <span style="position:absolute; inset:0; background:var(--border2); border-radius:20px; transition:.2s;"></span>
+          <span id="aiDot" style="position:absolute; top:2px; left:2px; width:16px; height:16px; background:var(--accent); border-radius:50%; transition:.2s;"></span>
+        </label>
+        <span id="aiLabel" style="font-size:11px; color:var(--accent); font-weight:600;">ON</span>
+      </div>
+      <div id="aiProviderWrap" style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:12px; color:var(--muted);">Provider</span>
+        <select id="aiProvider" style="background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-size:12px; font-family:inherit; cursor:pointer;">
+          <option value="openai">OpenAI (GPT-4o-mini)</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="grok">Grok (xAI)</option>
+        </select>
+        <span id="aiProviderStatus" style="font-size:10px; color:var(--muted);"></span>
+      </div>
+    </div>
+    <div class="status-bar hidden" id="statusBar">
+      <div class="spinner" id="spinner"></div>
+      <span id="statusMsg"></span>
+    </div>
+  </div>
+
+  <!-- ═══ Selections table ═══ -->
+  <div class="panel hidden" id="selectionsPanel">
+    <div class="section-label">
+      Decoded Selections <span class="count-badge" id="selectionsCount">0 events</span>
+    </div>
+    <table class="sel-table">
+      <thead>
+        <tr>
+          <th>Match</th>
+          <th>Market</th>
+          <th>Pick</th>
+          <th>Odds</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="selectionsBody"></tbody>
+    </table>
+  </div>
+
+  <!-- ═══ Result ═══ -->
+  <div class="panel hidden" id="resultPanel">
+    <div class="section-label">SportyBet Booking Code</div>
+    <div class="result-code" id="resultCode"></div>
+    <div class="result-btns">
+      <button class="btn btn-primary" id="copyBtn" onclick="copyCode()">Copy Code</button>
+      <a id="sportyLink" href="#" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">
+        <button class="btn btn-secondary">Open on SportyBet ↗</button>
+      </a>
+    </div>
+    <div class="result-meta" id="resultMeta"></div>
+    <div class="log-window" id="logWindow"></div>
+  </div>
+
+  <!-- ═══ Reference ═══ -->
+  <div class="panel">
+    <div class="section-label">Reference</div>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">IzentBet API response format</div>
+    <div class="ref-json"><pre>{
+  <span class="json-key">"success"</span>: <span class="json-num">true</span>,
+  <span class="json-key">"data"</span>: {
+    <span class="json-key">"code"</span>: <span class="json-str">"955670"</span>,
+    <span class="json-key">"selections"</span>: [
+      {
+        <span class="json-key">"odds"</span>: <span class="json-num">2.16</span>,
+        <span class="json-key">"market"</span>: <span class="json-str">"h2h"</span>,
+        <span class="json-key">"match_id"</span>: <span class="json-num">4128</span>,
+        <span class="json-key">"away_team"</span>: <span class="json-str">"B68"</span>,
+        <span class="json-key">"home_team"</span>: <span class="json-str">"B36 Torshavn"</span>,
+        <span class="json-key">"selection"</span>: <span class="json-str">"home"</span>,
+        <span class="json-key">"commence_time"</span>: <span class="json-str">"2026-03-21T17:00:00.000Z"</span>
+      }
+    ],
+    <span class="json-key">"total_odds"</span>: <span class="json-num">11.181</span>,
+    <span class="json-key">"selection_count"</span>: <span class="json-num">3</span>,
+    <span class="json-key">"expires_at"</span>: <span class="json-str">"2026-03-23T19:33:19.801Z"</span>
+  }
+}</pre></div>
+
+    <div style="font-size:12px; color:var(--muted); margin:20px 0 12px;">Outcome mapping</div>
+    <table class="ref-table">
+      <thead>
+        <tr>
+          <th>IzentBet Selection</th>
+          <th>SportyBet outcomeId</th>
+          <th>SportyBet marketId</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>home</td><td>1</td><td>1</td></tr>
+        <tr><td>draw</td><td>2</td><td>1</td></tr>
+        <tr><td>away</td><td>3</td><td>1</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+  let currentCode = '';
+  let currentPlatform = 'sportybet';
+
+  function setPlatform(p) {
+    currentPlatform = p;
+    document.getElementById('platformSporty').className = 'platform-btn' + (p === 'sportybet' ? ' active' : '');
+    document.getElementById('platformBet9ja').className = 'platform-btn' + (p === 'bet9ja' ? ' active' : '');
+    storageSet('targetPlatform', p);
+  }
+
+  function storageGet(key, fallback) {
+    try { return localStorage.getItem(key) || fallback; } catch(e) { return fallback; }
+  }
+  function storageSet(key, val) {
+    try { localStorage.setItem(key, val); } catch(e) {}
+  }
+
+  let SERVER_BASE = storageGet('adminServerUrl', 'http://localhost:3001');
+  let ADMIN_KEY = storageGet('adminApiKey', '');
+
+  // Restore saved values on load
+  document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('serverUrl').value = SERVER_BASE;
+    if (ADMIN_KEY) document.getElementById('adminKey').value = ADMIN_KEY;
+
+    // Restore target platform
+    var savedPlatform = storageGet('targetPlatform', 'sportybet');
+    setPlatform(savedPlatform);
+
+    // Restore AI keys
+    var savedOpenai = storageGet('aiKeyOpenai', '');
+    var savedGemini = storageGet('aiKeyGemini', '');
+    var savedGrok = storageGet('aiKeyGrok', '');
+    if (savedOpenai) document.getElementById('aiKeyOpenai').value = savedOpenai;
+    if (savedGemini) document.getElementById('aiKeyGemini').value = savedGemini;
+    if (savedGrok) document.getElementById('aiKeyGrok').value = savedGrok;
+
+    // Auto-sync keys to server on load if any are saved
+    if (savedOpenai || savedGemini || savedGrok) {
+      setTimeout(syncAiKeys, 800);
+    }
+  });
+
+  async function syncAiKeys() {
+    var oKey = document.getElementById('aiKeyOpenai').value.trim();
+    var gKey = document.getElementById('aiKeyGemini').value.trim();
+    var xKey = document.getElementById('aiKeyGrok').value.trim();
+
+    // Save to localStorage
+    storageSet('aiKeyOpenai', oKey);
+    storageSet('aiKeyGemini', gKey);
+    storageSet('aiKeyGrok', xKey);
+
+    var base = document.getElementById('serverUrl').value.trim().replace(/\/+$/, '');
+    var key = document.getElementById('adminKey').value.trim();
+    if (!base || !key) return;
+
+    var notice = document.getElementById('aiKeysNotice');
+    try {
+      var res = await fetch(base + '/api/ai-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+        body: JSON.stringify({ openai: oKey || '', gemini: gKey || '', grok: xKey || '' })
+      });
+      var json = await res.json();
+      if (json.success) {
+        var names = json.providers.map(function(p) { return p.name; });
+        notice.textContent = names.length > 0
+          ? 'Active: ' + names.join(', ')
+          : 'No AI keys active. Add a key above to enable AI fallback.';
+        notice.style.color = names.length > 0 ? 'var(--accent)' : 'var(--muted)';
+      }
+    } catch(e) {
+      notice.textContent = 'Could not sync keys to server.';
+      notice.style.color = 'var(--warn)';
+    }
+  }
+
+  // Persist config on change
+  document.addEventListener('input', function(e) {
+    if (e.target.id === 'serverUrl') storageSet('adminServerUrl', e.target.value.trim());
+    if (e.target.id === 'adminKey') storageSet('adminApiKey', e.target.value.trim());
+  });
+
+  function getHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      'x-api-key': ADMIN_KEY
+    };
+  }
+
+  function mapToBet9ja(market, selection, teamsReversed) {
+    var sel = (selection || '').toLowerCase().trim();
+
+    var overMatch = sel.match(/over\s*([\d.]+)/i);
+    var underMatch = sel.match(/under\s*([\d.]+)/i);
+    if (overMatch) return 'S_OU@' + overMatch[1] + '_O';
+    if (underMatch) return 'S_OU@' + underMatch[1] + '_U';
+
+    if (market === 'btts') {
+      if (sel === 'yes') return 'S_GGNG_Y';
+      if (sel === 'no')  return 'S_GGNG_N';
+    }
+
+    if (market === 'double_chance') {
+      if (sel === '1x') return 'S_DC_1X';
+      if (sel === 'x2') return 'S_DC_X2';
+      if (sel === '12') return 'S_DC_12';
+    }
+
+    var isHome = /^1\s*win$/.test(sel) || sel === 'home' ||
+                 sel === '1' || sel === 'home win';
+    var isAway = /^2\s*win$/.test(sel) || sel === 'away' ||
+                 sel === '2' || sel === 'away win';
+    var isDraw = sel === 'draw' || sel === 'x' ||
+                 sel === 'tie' || /^x\s*win$/.test(sel);
+
+    if (isDraw) return 'S_1X2_X';
+    if (isHome) return teamsReversed ? 'S_1X2_2' : 'S_1X2_1';
+    if (isAway) return teamsReversed ? 'S_1X2_1' : 'S_1X2_2';
+    return 'S_1X2_1';
+  }
+
+  async function startConversion() {
+    const bookingCode = document.getElementById('bookingInput').value.trim().toUpperCase();
+    SERVER_BASE = document.getElementById('serverUrl').value.trim().replace(/\/+$/, '');
+    ADMIN_KEY = document.getElementById('adminKey').value.trim();
+
+    // Persist for next refresh
+    storageSet('adminServerUrl', SERVER_BASE);
+    storageSet('adminApiKey', ADMIN_KEY);
+
+    if (!bookingCode) { alert('Please enter an IzentBet booking code'); return; }
+    if (!SERVER_BASE) { alert('Please enter your server URL'); return; }
+    if (!ADMIN_KEY) { alert('Please enter your admin API key'); return; }
+
+    clearResults();
+    setStep(2);
+
+    if (currentPlatform === 'bet9ja') {
+      // ===== BET9JA PIPELINE =====
+      setStatus('Converting to Bet9ja...', 'loading');
+      log('Sending booking code to server (Bet9ja): ' + bookingCode, 'info');
+
+      try {
+        var res = await fetch(SERVER_BASE + '/api/convert/bet9ja', {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ bookingCode: bookingCode })
+        });
+        var json = await res.json();
+
+        if (!json.selections || json.selections.length === 0) {
+          throw new Error(json.error || 'No selections returned');
+        }
+
+        var uiSelections = json.selections.map(function(s) {
+          return {
+            home_team: s.izentbet.home_team,
+            away_team: s.izentbet.away_team,
+            selection: s.izentbet.selection,
+            market: s.izentbet.market,
+            odds: s.izentbet.odds,
+            commence_time: s.izentbet.commence_time || ''
+          };
+        });
+
+        log('Decoded ' + uiSelections.length + ' selection(s)', 'ok');
+        renderSelections(uiSelections);
+        document.getElementById('selectionsPanel').classList.remove('hidden');
+        document.getElementById('selectionsCount').textContent = uiSelections.length + ' events';
+
+        setStep(3);
+        setStatus('Processing matches on Bet9ja...', 'loading');
+
+        for (var i = 0; i < json.selections.length; i++) {
+          var entry = json.selections[i];
+          if (entry.bet9ja.found) {
+            updateRow(i, 'matched');
+            var revNote = entry.bet9ja.teamsReversed ? ' [teams reversed]' : '';
+            log('Matched: ' + entry.izentbet.home_team + ' → ' + entry.bet9ja.eventId + ' (' + entry.bet9ja.marketKey + ')' + revNote, 'ok');
+          } else {
+            updateRow(i, 'failed');
+            log('Not found: ' + entry.izentbet.home_team + ' vs ' + entry.izentbet.away_team, 'warn');
+          }
+        }
+
+        log(json.matched + '/' + json.total + ' matched', 'info');
+
+        if (json.success && json.bet9jaCode) {
+          setStep(4);
+          currentCode = json.bet9jaCode;
+          showResult(json.bet9jaCode, json.matched, uiSelections, 'bet9ja');
+          setStatus('Bet9ja conversion successful!', 'success');
+          log('Bet9ja code: ' + json.bet9jaCode, 'ok');
+        } else {
+          setStatus('Failed: ' + (json.error || 'Unknown error'), 'error');
+          log(json.error || 'Conversion failed', 'err');
+        }
+      } catch (e) {
+        setStatus('Error: ' + e.message, 'error');
+        log(e.message, 'err');
+      }
+      return;
+    }
+
+    // ===== SPORTYBET PIPELINE (existing) =====
+    setStep(2);
+      const aiOn = document.getElementById('aiToggle').checked;
+      const aiProv = document.getElementById('aiProvider').value;
+      setStatus(aiOn ? 'Converting via full pipeline (AI: ' + aiProv + ')...' : 'Converting (static only)...', 'loading');
+      log('Sending booking code to server: ' + bookingCode + (aiOn ? ' [AI: ' + aiProv + ']' : ' [static only]'), 'info');
+
+    try {
+      const res = await fetch(SERVER_BASE + '/api/convert', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          bookingCode: bookingCode,
+          useAI: aiOn,
+          aiProvider: aiProv
+        })
+      });
+      const json = await res.json();
+
+      if (!json.selections || json.selections.length === 0) {
+        throw new Error(json.error || 'No selections returned');
+      }
+
+      // Build selection data from response for UI
+      const uiSelections = json.selections.map(function(s) {
+        return {
+          home_team: s.izentbet.home_team,
+          away_team: s.izentbet.away_team,
+          selection: s.izentbet.selection,
+          market: s.izentbet.market,
+          odds: s.izentbet.odds,
+          commence_time: s.izentbet.commence_time || ''
+        };
+      });
+
+      log('Decoded ' + uiSelections.length + ' selection(s)', 'ok');
+      renderSelections(uiSelections);
+      document.getElementById('selectionsPanel').classList.remove('hidden');
+      document.getElementById('selectionsCount').textContent = uiSelections.length + ' events';
+
+      setStep(3);
+      setStatus('Processing matches...', 'loading');
+
+      // Update rows with match results and AI status
+      var aiCount = 0;
+      for (var i = 0; i < json.selections.length; i++) {
+        var entry = json.selections[i];
+        if (entry.sportybet.found) {
+          updateRow(i, 'matched', entry.sportybet.resolvedBy);
+          var revNote = entry.sportybet.teamsReversed ? ' [teams reversed]' : '';
+          if (entry.sportybet.resolvedBy === 'ai') {
+            aiCount++;
+            log('AI resolved: ' + entry.izentbet.home_team + ' → market ' + entry.sportybet.marketId + ' outcome ' + entry.sportybet.outcomeId + revNote, 'ok');
+          } else {
+            log('Matched: ' + entry.izentbet.home_team + ' → ' + entry.sportybet.eventId + ' (static)' + revNote, 'ok');
+          }
+        } else {
+          updateRow(i, 'failed');
+          log('Not found: ' + entry.izentbet.home_team + ' vs ' + entry.izentbet.away_team, 'warn');
+        }
+      }
+
+      if (aiCount > 0) {
+        log(aiCount + ' selection(s) resolved by AI', 'info');
+      }
+
+      log(json.matched + '/' + json.total + ' matched', 'info');
+
+      if (json.success && json.sportyBetCode) {
+        setStep(4);
+        currentCode = json.sportyBetCode;
+        showResult(json.sportyBetCode, json.matched, uiSelections, 'sportybet');
+        setStatus('Conversion successful!', 'success');
+        log('SportyBet code: ' + json.sportyBetCode, 'ok');
+      } else {
+        setStatus('Failed: ' + (json.error || 'Unknown error'), 'error');
+        log(json.error || 'Conversion failed', 'err');
+      }
+    } catch (e) {
+      setStatus('Error: ' + e.message, 'error');
+      log(e.message, 'err');
+    }
+  }
+
+  function getMarketDisplay(market, selection) {
+    var mkt = (market || '').toLowerCase();
+    var sel = (selection || '').toLowerCase();
+    if (/btts/.test(sel) && /(over|under)/.test(sel)) return 'Over/Under & BTTS';
+    if (/win.*&.*btts|draw.*&.*btts/.test(sel)) return '1X2 & BTTS';
+    if (/win.*&.*(over|under)|draw.*&.*(over|under)/.test(sel)) return '1X2 & Over/Under';
+    if (/^btts/.test(sel)) return 'Both Teams To Score';
+    if (/^(over|under)\s+[\d.]/.test(sel)) return 'Over/Under (Total Goals)';
+    if (mkt === 'totals' || mkt.indexOf('over/under') !== -1) return 'Over/Under (Total Goals)';
+    if (mkt === 'spreads' || mkt.indexOf('handicap') !== -1) return 'Handicap';
+    if (/win$/.test(sel)) return '1X2 (Match Result)';
+    return '1X2 (Match Result)';
+  }
+
+  async function runDemo() {
+    clearAll();
+    document.getElementById('bookingInput').value = '955670';
+
+    var demoSelections = [
+      {
+        match_id: 4128,
+        home_team: 'B36 Torshavn',
+        away_team: 'B68',
+        selection: 'home',
+        market: 'h2h',
+        odds: 2.16,
+        commence_time: new Date(Date.now() + 86400000).toISOString()
+      },
+      {
+        match_id: 2918,
+        home_team: 'Rudar',
+        away_team: 'Brinje-Grosuplje',
+        selection: 'home',
+        market: 'h2h',
+        odds: 2.03,
+        commence_time: new Date(Date.now() + 86400000).toISOString()
+      },
+      {
+        match_id: 2919,
+        home_team: 'AB Copenhagen',
+        away_team: 'Ish\u00f8j',
+        selection: 'home',
+        market: 'h2h',
+        odds: 2.55,
+        commence_time: new Date(Date.now() + 90000000).toISOString()
+      }
+    ];
+
+    setStep(2);
+    setStatus('Fetching selections from IzentBet...', 'loading');
+    log('Fetching booking code: 955670', 'info');
+    await sleep(800);
+    log('Decoded 3 selection(s)', 'ok');
+
+    renderSelections(demoSelections);
+    document.getElementById('selectionsPanel').classList.remove('hidden');
+    document.getElementById('selectionsCount').textContent = '3 events';
+
+    setStep(3);
+    setStatus('Matching events on SportyBet...', 'loading');
+
+    var statuses = ['matched', 'matched', 'failed'];
+    var notes = [
+      'Matched: B36 Torshavn \u2192 sr:match:70110001 (via home_team_full)',
+      'Matched: Rudar \u2192 sr:match:70110002 (via away_team)',
+      'Not found on SportyBet: AB Copenhagen vs Ish\u00f8j'
+    ];
+    for (var i = 0; i < demoSelections.length; i++) {
+      log('Searching: ' + demoSelections[i].home_team + ' vs ' + demoSelections[i].away_team, 'info');
+      await sleep(600);
+      updateRow(i, statuses[i]);
+      log(notes[i], statuses[i] === 'matched' ? 'ok' : 'warn');
+    }
+
+    log('2/3 events matched. Generating code...', 'info');
+    setStep(4);
+    setStatus('Generating SportyBet code for 2 selection(s)...', 'loading');
+    await sleep(700);
+
+    currentCode = 'Z9UY4Q';
+    showResult('Z9UY4Q', 2, demoSelections);
+    setStatus('Conversion successful!', 'success');
+    log('SportyBet code: Z9UY4Q', 'ok');
+    log('Done.', 'ok');
+  }
+
+  function showResult(shareCode, matchedCount, selections, platform) {
+    platform = platform || 'sportybet';
+    document.getElementById('resultCode').textContent = shareCode;
+
+    if (platform === 'bet9ja') {
+      document.getElementById('sportyLink').href =
+        'https://sports.bet9ja.com/#booking/' + encodeURIComponent(shareCode);
+    } else {
+      document.getElementById('sportyLink').href =
+        'https://www.sportybet.com/ng/sport/booking-code?bc=' + encodeURIComponent(shareCode);
+    }
+
+    var platformLabel = platform === 'bet9ja' ? 'Bet9ja' : 'SportyBet NG';
+    var openBtnText = platform === 'bet9ja' ? 'Open on Bet9ja ↗' : 'Open on SportyBet ↗';
+    document.getElementById('sportyLink').querySelector('button').textContent = openBtnText;
+
+    var totalOdds = selections.reduce(function(acc, s) { return acc * parseFloat(s.odds); }, 1);
+
+    document.getElementById('resultMeta').innerHTML =
+      '<div class="meta-item">' +
+        '<div class="meta-key">Matched</div>' +
+        '<div class="meta-val">' + matchedCount + ' / ' + selections.length + '</div>' +
+      '</div>' +
+      '<div class="meta-item">' +
+        '<div class="meta-key">Total Odds</div>' +
+        '<div class="meta-val">' + totalOdds.toFixed(2) + '</div>' +
+      '</div>' +
+      '<div class="meta-item">' +
+        '<div class="meta-key">Platform</div>' +
+        '<div class="meta-val">' + platformLabel + '</div>' +
+      '</div>' +
+      '<div class="meta-item">' +
+        '<div class="meta-key">Converted</div>' +
+        '<div class="meta-val">' + new Date().toLocaleTimeString() + '</div>' +
+      '</div>';
+
+    document.getElementById('resultPanel').classList.remove('hidden');
+  }
+
+  function copyCode() {
+    navigator.clipboard.writeText(currentCode).then(function() {
+      var btn = document.getElementById('copyBtn');
+      btn.textContent = '\u2713 Copied!';
+      setTimeout(function() { btn.textContent = 'Copy Code'; }, 2000);
+    });
+  }
+
+  function renderSelections(selections) {
+    var tbody = document.getElementById('selectionsBody');
+    tbody.innerHTML = selections.map(function(s, i) {
+      return '<tr id="row-' + i + '">' +
+        '<td>' +
+          '<div class="match-name">' + escapeHtml(s.home_team) + ' vs ' + escapeHtml(s.away_team) + '</div>' +
+          '<div class="match-date">' + formatDate(s.commence_time) + '</div>' +
+        '</td>' +
+        '<td class="market-cell">' + getMarketDisplay(s.market, s.selection) + '</td>' +
+        '<td><span class="pick-badge">' + capitalise(s.selection) + '</span></td>' +
+        '<td class="odds-cell">' + parseFloat(s.odds).toFixed(2) + '</td>' +
+        '<td><span class="status-badge pending" id="status-' + i + '">\u22ef pending</span></td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  function updateRow(i, status, resolvedBy) {
+    var el = document.getElementById('status-' + i);
+    if (!el) return;
+    el.className = 'status-badge ' + status;
+    if (status === 'matched' && resolvedBy === 'ai') {
+      el.innerHTML = '\u2713 matched <span style="background:#7c3aed;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px;">AI</span>';
+    } else {
+      el.textContent = status === 'matched' ? '\u2713 matched' : '\u2717 not found';
+    }
+  }
+
+  function formatDate(iso) {
+    try {
+      return new Date(iso).toLocaleDateString('en-GB', {
+        day: 'numeric', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    } catch (e) { return iso; }
+  }
+
+  function capitalise(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  }
+
+  function setStep(n) {
+    for (var i = 1; i <= 4; i++) {
+      var el = document.getElementById('step' + i);
+      if (!el) continue;
+      el.className = i < n ? 'step done' : i === n ? 'step active' : 'step';
+    }
+  }
+
+  function setStatus(msg, type) {
+    var bar = document.getElementById('statusBar');
+    var msgEl = document.getElementById('statusMsg');
+    var spinner = document.getElementById('spinner');
+    bar.className = 'status-bar ' + type;
+    bar.classList.remove('hidden');
+    msgEl.textContent = msg;
+    spinner.style.display = type === 'loading' ? 'block' : 'none';
+  }
+
+  function log(msg, type) {
+    type = type || 'info';
+    var el = document.getElementById('logWindow');
+    if (!el) return;
+    var prefix = { info: '[INFO]', ok: '[ OK ]', warn: '[WARN]', err: '[ERR ]' };
+    var cls = { info: 'log-info', ok: 'log-ok', warn: 'log-warn', err: 'log-err' };
+    var div = document.createElement('div');
+    var span = document.createElement('span');
+    span.className = cls[type] || 'log-info';
+    span.textContent = (prefix[type] || '[INFO]') + ' ';
+    div.appendChild(span);
+    div.appendChild(document.createTextNode(msg));
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function clearResults() {
+    document.getElementById('selectionsPanel').classList.add('hidden');
+    document.getElementById('resultPanel').classList.add('hidden');
+    document.getElementById('selectionsBody').innerHTML = '';
+    document.getElementById('logWindow').innerHTML = '';
+    document.getElementById('statusBar').className = 'status-bar hidden';
+    setStep(1);
+  }
+
+  function clearAll() {
+    document.getElementById('bookingInput').value = '';
+    clearResults();
+  }
+
+  function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+  // AI toggle + provider selector behavior
+  (function() {
+    var toggle = document.getElementById('aiToggle');
+    var dot = document.getElementById('aiDot');
+    var label = document.getElementById('aiLabel');
+    var provWrap = document.getElementById('aiProviderWrap');
+    var provSelect = document.getElementById('aiProvider');
+    var provStatus = document.getElementById('aiProviderStatus');
+
+    function updateToggle() {
+      if (toggle.checked) {
+        dot.style.left = '18px';
+        label.textContent = 'ON';
+        label.style.color = 'var(--accent)';
+        provWrap.style.opacity = '1';
+        provWrap.style.pointerEvents = 'auto';
+      } else {
+        dot.style.left = '2px';
+        label.textContent = 'OFF';
+        label.style.color = 'var(--muted)';
+        provWrap.style.opacity = '0.4';
+        provWrap.style.pointerEvents = 'none';
+      }
+    }
+    toggle.addEventListener('change', updateToggle);
+    updateToggle();
+
+    // Restore saved provider
+    var savedProv = storageGet('aiProvider', '');
+    if (savedProv) provSelect.value = savedProv;
+    provSelect.addEventListener('change', function() {
+      storageSet('aiProvider', provSelect.value);
+    });
+
+    // Fetch available providers from server
+    async function loadProviders() {
+      try {
+        var base = document.getElementById('serverUrl').value.trim().replace(/\/+$/, '');
+        var key = document.getElementById('adminKey').value.trim();
+        if (!base || !key) return;
+        var res = await fetch(base + '/api/ai-providers', {
+          headers: { 'Content-Type': 'application/json', 'x-api-key': key }
+        });
+        var json = await res.json();
+        if (json.providers && json.providers.length > 0) {
+          provStatus.textContent = json.providers.length + ' active';
+          provStatus.style.color = 'var(--accent)';
+          // Mark unavailable options
+          var ids = json.providers.map(function(p) { return p.id; });
+          for (var i = 0; i < provSelect.options.length; i++) {
+            var opt = provSelect.options[i];
+            if (ids.indexOf(opt.value) === -1) {
+              opt.textContent = opt.textContent.replace(/ \u2717$/, '') + ' \u2717';
+              opt.style.color = '#666';
+            } else {
+              opt.textContent = opt.textContent.replace(/ \u2717$/, '');
+              opt.style.color = '';
+            }
+          }
+          // Auto-select first available if current not available
+          if (ids.indexOf(provSelect.value) === -1) {
+            provSelect.value = ids[0];
+            storageSet('aiProvider', ids[0]);
+          }
+        } else {
+          provStatus.textContent = 'none configured';
+          provStatus.style.color = 'var(--warn)';
+        }
+      } catch(e) {
+        provStatus.textContent = '';
+      }
+    }
+
+    // Load on startup after a brief delay, and when config changes
+    setTimeout(loadProviders, 500);
+    document.getElementById('serverUrl').addEventListener('change', function() { setTimeout(loadProviders, 300); });
+    document.getElementById('adminKey').addEventListener('change', function() { setTimeout(loadProviders, 300); });
+  })();
+</script>
+
+</body>
+</html>
