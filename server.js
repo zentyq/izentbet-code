@@ -401,7 +401,7 @@ function findBet9jaMatch(events, izentHome, izentAway, commenceTime, sport) {
     if (nameResult.score < 2) continue; // Require BOTH teams to match
 
     // Time check
-    let timeDiff = Infinity;
+    let timeDiff = 0;
     let timeMatched = false;
     if (hasTime) {
       const evTime = new Date(ev.STARTDATE).getTime();
@@ -410,7 +410,7 @@ function findBet9jaMatch(events, izentHome, izentAway, commenceTime, sport) {
       timeMatched = true;
     }
 
-    if (timeDiff < bestTimeDiff) {
+    if (!bestMatch || timeDiff < bestTimeDiff) {
       bestTimeDiff = timeDiff;
       bestMatch = ev;
       bestResult = nameResult;
@@ -715,17 +715,16 @@ async function searchSportyBet(keyword) {
     return [];
   }
   const json = await res.json();
-  if (json.bizCode !== 10000 || !json.data) return [];
+  if (json.bizCode !== 10000 || !json.data) {
+    console.log(`[SPORTYBET] Search bizCode=${json.bizCode}, data=${!!json.data}`);
+    return [];
+  }
 
   const events = [];
   if (Array.isArray(json.data.live)) events.push(...json.data.live);
   if (Array.isArray(json.data.upcoming)) events.push(...json.data.upcoming);
-  // Collect from any other arrays in data
-  for (const key of Object.keys(json.data)) {
-    if (Array.isArray(json.data[key]) && key !== 'live' && key !== 'upcoming') {
-      events.push(...json.data[key]);
-    }
-  }
+  if (Array.isArray(json.data.preMatch)) events.push(...json.data.preMatch);
+  console.log(`[SPORTYBET] Found ${events.length} events for "${keyword}"`);
   return events;
 }
 
@@ -750,13 +749,13 @@ function findMatchingEvent(events, izentHome, izentAway, commenceTime, sport) {
     );
     if (nameResult.score < 2) continue; // Require BOTH teams to match
 
-    let timeDiff = Infinity;
+    let timeDiff = 0;
     if (hasTime) {
       timeDiff = Math.abs((ev.estimateStartTime || 0) - targetTime);
       if (timeDiff > tolerance) continue;
     }
 
-    if (timeDiff < bestTimeDiff) {
+    if (!bestMatch || timeDiff < bestTimeDiff) {
       bestTimeDiff = timeDiff;
       bestMatch = ev;
       bestResult = nameResult;
