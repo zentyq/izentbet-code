@@ -259,29 +259,37 @@ function mapToSportyBet(market, selection, homeTeam, awayTeam, teamsReversed = f
   if (underOnly) return { marketId: '18', specifier: `total=${underOnly[1]}`, outcomeId: '13' };
 
   // ─── 1X2 outcome resolver — handles ALL IzentBet selection formats ───
-  function resolveOutcome(s) {
-    // Numeric win: "1 win" = home, "2 win" = away
-    if (/^1\s*win$/i.test(s)) return teamsReversed ? '3' : '1';
-    if (/^2\s*win$/i.test(s)) return teamsReversed ? '1' : '3';
-
-    // Team-name win: "Barcelona win" etc.
-    const teamWin = s.match(/^(.+?)\s+win$/);
-    if (teamWin) return side(teamWin[1]) === 'home' ? '1' : '3';
-
-    // Draw variations
-    if (s === 'draw' || s === 'x' || s === 'tie') return '2';
+  function resolveOutcomeId(s, reversed = false) {
+    const t = (s || '').toLowerCase().trim();
 
     // Home variations
-    if (s === 'home' || s === '1' || s === 'home win') return teamsReversed ? '3' : '1';
+    const isHome = t === 'home' || t === '1' ||
+                   /^home\s*win$/i.test(t) ||
+                   /^1\s*win$/i.test(t);
 
     // Away variations
-    if (s === 'away' || s === '2' || s === 'away win') return teamsReversed ? '1' : '3';
+    const isAway = t === 'away' || t === '2' ||
+                   /^away\s*win$/i.test(t) ||
+                   /^2\s*win$/i.test(t);
+
+    // Draw variations
+    const isDraw = t === 'draw' || t === 'x' || t === 'tie' ||
+                   /^draw\s*win$/i.test(t) ||
+                   /^x\s*win$/i.test(t);
+
+    if (isDraw) return '2';
+    if (isHome) return reversed ? '3' : '1';
+    if (isAway) return reversed ? '1' : '3';
+
+    // Team-name win: "Barcelona win" etc. — checked AFTER home/away/draw
+    const teamWin = t.match(/^(.+?)\s+win$/);
+    if (teamWin) return side(teamWin[1]) === 'home' ? '1' : '3';
 
     console.log('[WARN] Unknown selection format:', s);
     return null;
   }
 
-  const outcomeId = resolveOutcome(sel);
+  const outcomeId = resolveOutcomeId(sel, teamsReversed);
   if (outcomeId) {
     return { marketId: '1', specifier: null, outcomeId };
   }
@@ -315,19 +323,30 @@ function mapToBet9ja(market, selection, teamsReversed = false) {
   }
 
   // 1X2 — handle all formats + team reversal
-  const isHome = /^1\s*win$/.test(sel) || sel === 'home' ||
-                 sel === '1' || sel === 'home win';
-  const isAway = /^2\s*win$/.test(sel) || sel === 'away' ||
-                 sel === '2' || sel === 'away win';
-  const isDraw = sel === 'draw' || sel === 'x' ||
-                 sel === 'tie' || /^x\s*win$/.test(sel);
+  function resolveSign(s, reversed) {
+    const t = (s || '').toLowerCase().trim();
 
-  if (isDraw) return 'S_1X2_X';
-  if (isHome) return teamsReversed ? 'S_1X2_2' : 'S_1X2_1';
-  if (isAway) return teamsReversed ? 'S_1X2_1' : 'S_1X2_2';
+    const isHome = t === 'home' || t === '1' ||
+                   /^1\s*win$/i.test(t) ||
+                   /^home\s*win$/i.test(t);
 
-  console.log('[WARN] Unknown selection for Bet9ja:', sel);
-  return 'S_1X2_1';
+    const isAway = t === 'away' || t === '2' ||
+                   /^2\s*win$/i.test(t) ||
+                   /^away\s*win$/i.test(t);
+
+    const isDraw = t === 'draw' || t === 'x' || t === 'tie' ||
+                   /^x\s*win$/i.test(t);
+
+    if (isDraw) return 'X';
+    if (isHome) return reversed ? '2' : '1';
+    if (isAway) return reversed ? '1' : '2';
+
+    console.log('[WARN] Unknown selection format:', s);
+    return '1';
+  }
+
+  const sign = resolveSign(sel, teamsReversed);
+  return `S_1X2_${sign}`;
 }
 
 // ─── Market Label Normaliser ─────────────────────────────────────
@@ -1007,6 +1026,7 @@ app.post('/api/convert', async (req, res) => {
       );
 
       let sportyMapping = mapToSportyBet(sel.market, sel.selection, sel.home_team, sel.away_team, searchResult.teamsReversed || false);
+      console.log('[SELECTION]', sel.home_team, 'vs', sel.away_team, '→ raw selection:', sel.selection, '→ outcomeId:', sportyMapping.outcomeId);
       let resolvedBy = 'static';
 
       // AI fallback: if static mapper fell through to default 1X2 but the
