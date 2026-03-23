@@ -36,8 +36,10 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ─── Middleware ───────────────────────────────────────────────────
+const path = require('path');
 app.use(express.json());
 app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Public API CORS (no auth required) ──────────────────────────
 const publicOrigins = (process.env.PUBLIC_ALLOWED_ORIGINS || '*').split(',').map(s => s.trim()).filter(Boolean);
