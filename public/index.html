@@ -400,6 +400,12 @@
     .sel-pick {
       font-size: 12px; color: var(--text2); margin-top: 2px;
     }
+    .sel-matched-as {
+      font-size: 11px; color: var(--muted); margin-top: 3px;
+    }
+    .sel-matched-as .conf-warn {
+      color: var(--warn);
+    }
     .sel-odds {
       font-weight: 700; font-size: 14px; margin-left: 12px;
       flex-shrink: 0;
@@ -660,12 +666,23 @@ function renderSelections(sels, uid) {
     <div class="selections-list" id="${sanitize(id)}">`;
   sels.forEach((s, i) => {
     const converted = s.converted !== false;
+    let matchedLine = '';
+    if (s.matchedAs) {
+      if (s.confidence === 'low') {
+        matchedLine = `<div class="sel-matched-as"><span class="conf-warn">&#9888; ${sanitize(s.matchedAs)} — Low confidence, verify manually</span></div>`;
+      } else if (s.confidence === 'medium') {
+        matchedLine = `<div class="sel-matched-as"><span class="conf-warn">&#9888;</span> ${sanitize(s.matchedAs)}</div>`;
+      } else {
+        matchedLine = `<div class="sel-matched-as">${sanitize(s.matchedAs)}</div>`;
+      }
+    }
     html += `
       <div class="sel-item">
         <div class="sel-num">${i + 1}</div>
         <div class="sel-info">
           <div class="sel-match">${sanitize(s.match || '')}</div>
           <div class="sel-pick">${sanitize(s.market || '')} &mdash; ${sanitize(s.pick || '')}</div>
+          ${matchedLine}
         </div>
         <div class="sel-odds">${sanitize(String(s.odds || ''))}</div>
         <div class="sel-status-icon">${converted ? '&#9989;' : '&#10060;'}</div>

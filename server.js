@@ -104,7 +104,73 @@ async function sportyFetch(url, options = {}, retries = 3) {
 
 const OUTCOME_MAP = { home: '1', draw: '2', away: '3' };
 const REVERSED_OUTCOME_MAP = { home: '3', draw: '2', away: '1' };
-const TIME_TOLERANCE = 3 * 60 * 60 * 1000; // 3 hours in ms
+
+// ─── Shared matching utilities ───────────────────────────────────
+function normalize(str) {
+  return (str || '')
+    .toLowerCase()
+    .replace(/\bfc\b|\bsc\b|\bac\b|\bbc\b|\bcd\b|\bsd\b|\bca\b|\baf\b|\bcf\b/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim();
+}
+
+function firstWord(str) {
+  const words = normalize(str).split(/\s+/);
+  return words.find(w => w.length >= 3) || words[0] || '';
+}
+
+function scoreName(sportyHome, sportyAway, izentHome, izentAway) {
+  const sHome = normalize(sportyHome);
+  const sAway = normalize(sportyAway);
+  const iHome = normalize(izentHome);
+  const iAway = normalize(izentAway);
+  const iHomeWord = firstWord(izentHome);
+  const iAwayWord = firstWord(izentAway);
+
+  const homeMatch = sHome.includes(iHomeWord) || iHome.includes(firstWord(sportyHome));
+  const awayMatch = sAway.includes(iAwayWord) || iAway.includes(firstWord(sportyAway));
+  const homeMatchRev = sAway.includes(iHomeWord) || iHome.includes(firstWord(sportyAway));
+  const awayMatchRev = sHome.includes(iAwayWord) || iAway.includes(firstWord(sportyHome));
+
+  if (homeMatch && awayMatch) return { score: 2, reversed: false };
+  if (homeMatchRev && awayMatchRev) return { score: 2, reversed: true };
+  if (homeMatch || awayMatch) return { score: 1, reversed: false };
+  return { score: 0, reversed: false };
+}
+
+function isRealEvent(homeTeam, awayTeam, eventName) {
+  const combined = [homeTeam, awayTeam, eventName].join(' ').toLowerCase();
+  const fakeKeywords = [
+    'srl', 'virtual', 'zoom', 'esoccer',
+    'esports', 'simulated', 'cyber',
+    'efootball', 'e-football', 'pes ',
+    'fifa ', 'gt league', 'players soccer',
+    'players zoom', 'eseries', 'e-series',
+    'esim', 'animation'
+  ];
+  return !fakeKeywords.some(kw => combined.includes(kw));
+}
+
+function getTimeTolerance(sport) {
+  const s = (sport || '').toLowerCase();
+  if (s.includes('basketball') || s.includes('nba') || s.includes('nfl') || s.includes('nhl') || s.includes('baseball')) {
+    return 2 * 60 * 60 * 1000; // 2 hours
+  }
+  if (s.includes('tennis')) {
+    return 1 * 60 * 60 * 1000; // 1 hour
+  }
+  return 4 * 60 * 60 * 1000; // 4 hours (default)
+}
+
+function inferSport(market, homeTeam, awayTeam) {
+  const all = [market, homeTeam, awayTeam].join(' ').toLowerCase();
+  if (all.includes('nba') || all.includes('basketball') || /pistons|lakers|celtics|warriors|bucks|heat|knicks|nets|76ers|thunder|rockets|bulls|jazz|pacers|magic|hawks|cavaliers|mavericks|nuggets|clippers|suns|spurs|timberwolves|trail blazers|raptors|wizards|grizzlies|pelicans|kings|hornets/i.test(all)) return 'basketball';
+  if (all.includes('nfl') || all.includes('nhl') || all.includes('mlb') || all.includes('baseball')) return 'baseball';
+  if (all.includes('tennis') || /\bwta\b|\batp\b/i.test(all)) return 'tennis';
+  return 'football';
+}
+
+const TIME_TOLERANCE_DEFAULT = 4 * 60 * 60 * 1000; // legacy fallback
 
 // ─── Bet9ja Constants ────────────────────────────────────────────
 const BET9JA_SEARCH_URL = 'https://apigw.bet9ja.com/sportsbook/search/SearchV2?source=desktop&v_cache_version=1.307.1.229';
@@ -306,117 +372,131 @@ async function searchBet9ja(keyword) {
     for (const sport of Object.values(json.D.S)) {
       if (Array.isArray(sport.E)) events.push(...sport.E);
     }
-    // Only football (SID === 1)
-    return events.filter(e => e.SID === 1);
+    return events;
   } catch (err) {
     console.log(`[BET9JA] Search error: ${err.message}`);
     return [];
   }
 }
 
-function findBet9jaMatch(events, keyword, commenceTime, awayKeyword) {
-  const kw = keyword.toLowerCase();
-  const akw = (awayKeyword || '').toLowerCase();
+function findBet9jaMatch(events, izentHome, izentAway, commenceTime, sport) {
   const targetTime = new Date(commenceTime).getTime();
   const hasTime = !isNaN(targetTime);
+  const tolerance = getTimeTolerance(sport);
+
+  // Filter virtual/fake events
+  const realEvents = events.filter(ev => isRealEvent('', '', ev.DS || ''));
 
   let bestMatch = null;
-  let bestScore = 0;
+  let bestResult = null;
+  let bestTimeDiff = Infinity;
 
-  for (const ev of events) {
-    const ds = (ev.DS || ev.GN || '').toLowerCase();
-    // Reject Zoom / SRL events unless keyword contains those words
-    if (/zoom|srl/i.test(ds) && !/zoom|srl/i.test(kw)) continue;
-
-    if (!ds.includes(kw)) continue;
-
-    let score = 0;
-    // Name match quality
+  for (const ev of realEvents) {
+    const ds = (ev.DS || ev.GN || '');
     const parts = ds.split(' - ');
-    const home = (parts[0] || '').trim();
-    const away = (parts[1] || '').trim();
-    if (home === kw || away === kw) score += 10;
-    else score += 1;
-    if (akw && (home.includes(akw) || away.includes(akw))) score += 5;
+    const bet9jaHome = (parts[0] || '').trim();
+    const bet9jaAway = (parts[1] || '').trim();
 
-    // Time match
+    const nameResult = scoreName(bet9jaHome, bet9jaAway, izentHome, izentAway);
+    if (nameResult.score < 2) continue; // Require BOTH teams to match
+
+    // Time check
+    let timeDiff = Infinity;
+    let timeMatched = false;
     if (hasTime) {
       const evTime = new Date(ev.STARTDATE).getTime();
-      const diff = Math.abs(evTime - targetTime);
-      if (diff < BET9JA_TIME_TOLERANCE) score += 20;
-      else continue; // skip if time doesn't match at all
+      timeDiff = Math.abs(evTime - targetTime);
+      if (timeDiff > tolerance) continue;
+      timeMatched = true;
     }
 
-    if (score > bestScore) {
-      bestScore = score;
+    if (timeDiff < bestTimeDiff) {
+      bestTimeDiff = timeDiff;
       bestMatch = ev;
+      bestResult = nameResult;
     }
   }
 
-  return bestMatch;
+  if (!bestMatch) return null;
+  return { event: bestMatch, nameResult: bestResult, timeMatched: bestTimeDiff < tolerance, timeDiff: bestTimeDiff };
 }
 
-async function searchBet9jaWithFallbacks(homeTeam, awayTeam, commenceTime) {
+async function searchBet9jaWithFallbacks(homeTeam, awayTeam, commenceTime, sport) {
+  const sport_ = sport || inferSport('', homeTeam, awayTeam);
   const attempts = [
+    { keyword: `${firstWord(homeTeam)} ${firstWord(awayTeam)}`, label: 'both_first_words' },
     { keyword: homeTeam, label: 'home_team_full' },
-    { keyword: awayTeam, label: 'away_team_full' }
+    { keyword: awayTeam, label: 'away_team_full' },
+    { keyword: firstWord(homeTeam), label: 'home_first_word' },
+    { keyword: firstWord(awayTeam), label: 'away_first_word' }
   ];
 
-  // Add word-level fallbacks
-  const homeWords = homeTeam.split(/\s+/);
-  if (homeWords.length > 1) {
-    for (const word of homeWords) {
-      if (word.length >= 2) attempts.push({ keyword: word, label: 'home_team_word' });
-    }
-  }
-  const awayWords = awayTeam.split(/\s+/);
-  if (awayWords.length > 1) {
-    for (const word of awayWords) {
-      if (word.length >= 2) attempts.push({ keyword: word, label: 'away_team_word' });
-    }
-  }
+  // Deduplicate
+  const seen = new Set();
+  const uniqueAttempts = attempts.filter(a => {
+    const k = a.keyword.toLowerCase().trim();
+    if (!k || k.length < 2 || seen.has(k)) return false;
+    seen.add(k); return true;
+  });
 
-  for (const attempt of attempts) {
+  let globalBest = null;
+  let globalBestLabel = '';
+
+  for (const attempt of uniqueAttempts) {
+    console.log(`[MATCH] IzentBet: ${homeTeam} vs ${awayTeam}`);
+    console.log(`[MATCH] Searching Bet9ja with: "${attempt.keyword}"`);
     const events = await searchBet9ja(attempt.keyword);
     if (events.length === 0) {
       await sleep(300);
       continue;
     }
 
-    const awayKw = attempt.keyword === homeTeam ? awayTeam : homeTeam;
-    const match = findBet9jaMatch(events, attempt.keyword, commenceTime, awayKw);
-    if (match) {
-      const ds = match.DS || match.GN || '';
-      console.log(`[BET9JA] Matched: ${ds} → ID ${match.ID}`);
+    const result = findBet9jaMatch(events, homeTeam, awayTeam, commenceTime, sport_);
+    if (result) {
+      const ds = result.event.DS || result.event.GN || '';
+      const timeMins = Math.round(result.timeDiff / 60000);
+      const confidence = result.nameResult.score === 2 && result.timeMatched ? 'high'
+                       : result.nameResult.score === 2 ? 'medium' : 'low';
+      console.log(`[MATCH] Found: ${ds}`);
+      console.log(`[MATCH] Score: ${result.nameResult.score}/2 | Time diff: ${timeMins} mins | Confidence: ${confidence}`);
+      console.log(`[MATCH] Reversed: ${result.nameResult.reversed}`);
 
-      // Detect team reversal
-      const parts = ds.split(' - ');
-      const bet9jaHome = (parts[0] || '').toLowerCase().trim();
-      const izentHomeWord = homeTeam.toLowerCase().split(/\s+/)[0];
-      const teamsReversed = izentHomeWord.length >= 2 &&
-        !bet9jaHome.includes(izentHomeWord) &&
-        (parts[1] || '').toLowerCase().trim().includes(izentHomeWord);
-
-      if (teamsReversed) {
-        console.log(`[BET9JA] Teams reversed! IzentBet home "${homeTeam}" is Bet9ja away`);
+      if (!globalBest || result.timeDiff < globalBest.timeDiff) {
+        globalBest = result;
+        globalBestLabel = attempt.label;
       }
-
-      return {
-        found: true,
-        eventId: match.ID,
-        eventName: ds,
-        startDate: match.STARTDATE,
-        groupName: match.GN || '',
-        superGroup: match.SG || '',
-        odds: match.O || {},
-        matchedBy: attempt.label,
-        timeMatched: true,
-        teamsReversed
-      };
+      // If we got a high-confidence match, stop early
+      if (confidence === 'high') break;
     }
     await sleep(300);
   }
 
+  if (globalBest) {
+    const ev = globalBest.event;
+    const ds = ev.DS || ev.GN || '';
+    const confidence = globalBest.nameResult.score === 2 && globalBest.timeMatched ? 'high'
+                     : globalBest.nameResult.score === 2 ? 'medium' : 'low';
+    console.log(`[BET9JA] Matched: ${ds} → ID ${ev.ID}`);
+    if (globalBest.nameResult.reversed) {
+      console.log(`[BET9JA] Teams reversed! IzentBet home "${homeTeam}" is Bet9ja away`);
+    }
+    return {
+      found: true,
+      eventId: ev.ID,
+      eventName: ds,
+      matchedEventName: ds,
+      confidence,
+      startDate: ev.STARTDATE,
+      groupName: ev.GN || '',
+      superGroup: ev.SG || '',
+      odds: ev.O || {},
+      matchedBy: globalBestLabel,
+      timeMatched: globalBest.timeMatched,
+      teamsReversed: globalBest.nameResult.reversed
+    };
+  }
+
+  console.log(`[BET9JA] No score-2 match found for ${homeTeam} vs ${awayTeam}`);
   return { found: false, keyword: homeTeam };
 }
 
@@ -649,137 +729,119 @@ async function searchSportyBet(keyword) {
   return events;
 }
 
-function findMatchingEvent(events, keyword, commenceTime, awayKeyword) {
-  const kw = keyword.toLowerCase();
-  const akw = (awayKeyword || '').toLowerCase();
+function findMatchingEvent(events, izentHome, izentAway, commenceTime, sport) {
   const targetTime = new Date(commenceTime).getTime();
   const hasTime = !isNaN(targetTime);
+  const tolerance = getTimeTolerance(sport);
 
-  // Partition: real events first, BAZ/SRL/virtual as fallback
-  const isLimited = (ev) => {
-    const id = ev.eventId || '';
-    const home = ev.homeTeamName || '';
-    const away = ev.awayTeamName || '';
-    return /\bSRL\b/i.test(home) || /\bSRL\b/i.test(away) || id.includes(':BAZ');
-  };
-  const realEvents = events.filter(ev => !isLimited(ev));
-  const fallbackEvents = events.filter(ev => isLimited(ev));
-  const ordered = [...realEvents, ...fallbackEvents];
-
-  // Score each event: higher = better match
-  function score(ev) {
-    const home = (ev.homeTeamName || '').toLowerCase();
-    const away = (ev.awayTeamName || '').toLowerCase();
-    let s = 0;
-    // Exact match on team names
-    if (home === kw || away === kw) s += 10;
-    else if (home.includes(kw) || away.includes(kw)) s += 1;
-    // Bonus for matching away team too
-    if (akw && (home.includes(akw) || away.includes(akw))) s += 5;
-    if (akw && (home === akw || away === akw)) s += 10;
-    // Penalize if team name is much longer (e.g. "Real Madrid B" vs "Real Madrid")
-    const matchedName = home.includes(kw) ? home : away;
-    if (matchedName.length - kw.length <= 2) s += 3;
-    // Time match bonus
-    if (hasTime) {
-      const timeDiff = Math.abs(ev.estimateStartTime - targetTime);
-      if (timeDiff < TIME_TOLERANCE) s += 20;
-    }
-    return s;
-  }
+  // Filter virtual/fake events
+  const realEvents = events.filter(ev =>
+    isRealEvent(ev.homeTeamName || '', ev.awayTeamName || '', '')
+  );
 
   let bestMatch = null;
-  let bestScore = 0;
+  let bestResult = null;
+  let bestTimeDiff = Infinity;
 
-  for (const ev of ordered) {
-    const home = (ev.homeTeamName || '').toLowerCase();
-    const away = (ev.awayTeamName || '').toLowerCase();
-    if (!home.includes(kw) && !away.includes(kw)) continue;
+  for (const ev of realEvents) {
+    const nameResult = scoreName(
+      ev.homeTeamName || '', ev.awayTeamName || '',
+      izentHome, izentAway
+    );
+    if (nameResult.score < 2) continue; // Require BOTH teams to match
 
-    const s = score(ev);
-    if (s > bestScore) {
-      bestScore = s;
+    let timeDiff = Infinity;
+    if (hasTime) {
+      timeDiff = Math.abs((ev.estimateStartTime || 0) - targetTime);
+      if (timeDiff > tolerance) continue;
+    }
+
+    if (timeDiff < bestTimeDiff) {
+      bestTimeDiff = timeDiff;
       bestMatch = ev;
+      bestResult = nameResult;
     }
   }
 
-  if (bestMatch) {
-    const timeMatched = hasTime && Math.abs(bestMatch.estimateStartTime - targetTime) < TIME_TOLERANCE;
-    return { event: bestMatch, timeMatched };
-  }
-  return null;
+  if (!bestMatch) return null;
+  const timeMatched = hasTime && bestTimeDiff < tolerance;
+  return { event: bestMatch, nameResult: bestResult, timeMatched, timeDiff: bestTimeDiff };
 }
 
-async function searchWithFallbacks(homeTeam, awayTeam, commenceTime) {
+async function searchWithFallbacks(homeTeam, awayTeam, commenceTime, sport) {
+  const sport_ = sport || inferSport('', homeTeam, awayTeam);
   const attempts = [
+    { keyword: `${firstWord(homeTeam)} ${firstWord(awayTeam)}`, label: 'both_first_words' },
     { keyword: homeTeam, label: 'home_team_full' },
-    { keyword: awayTeam, label: 'away_team_full' }
+    { keyword: awayTeam, label: 'away_team_full' },
+    { keyword: firstWord(homeTeam), label: 'home_first_word' },
+    { keyword: firstWord(awayTeam), label: 'away_first_word' }
   ];
 
-  // Add first-word fallbacks
-  const homeWords = homeTeam.split(/\s+/);
-  if (homeWords.length > 1) {
-    for (const word of homeWords) {
-      if (word.length >= 2) {
-        attempts.push({ keyword: word, label: 'home_team_word' });
-      }
-    }
-  }
-  const awayWords = awayTeam.split(/\s+/);
-  if (awayWords.length > 1) {
-    for (const word of awayWords) {
-      if (word.length >= 2) {
-        attempts.push({ keyword: word, label: 'away_team_word' });
-      }
-    }
-  }
+  // Deduplicate
+  const seen = new Set();
+  const uniqueAttempts = attempts.filter(a => {
+    const k = a.keyword.toLowerCase().trim();
+    if (!k || k.length < 2 || seen.has(k)) return false;
+    seen.add(k); return true;
+  });
 
-  for (const attempt of attempts) {
+  let globalBest = null;
+  let globalBestLabel = '';
+
+  for (const attempt of uniqueAttempts) {
+    console.log(`[MATCH] IzentBet: ${homeTeam} vs ${awayTeam}`);
+    console.log(`[MATCH] Searching SportyBet with: "${attempt.keyword}"`);
     const events = await searchSportyBet(attempt.keyword);
     if (events.length === 0) {
       await sleep(300);
       continue;
     }
 
-    const result = findMatchingEvent(events, attempt.keyword, commenceTime, attempt.keyword === homeTeam ? awayTeam : homeTeam);
+    const result = findMatchingEvent(events, homeTeam, awayTeam, commenceTime, sport_);
     if (result) {
-      console.log(`[SPORTYBET] Matched: ${result.event.homeTeamName} vs ${result.event.awayTeamName} → ${result.event.eventId}`);
+      const evName = `${result.event.homeTeamName} vs ${result.event.awayTeamName}`;
+      const timeMins = Math.round(result.timeDiff / 60000);
+      const confidence = result.nameResult.score === 2 && result.timeMatched ? 'high'
+                       : result.nameResult.score === 2 ? 'medium' : 'low';
+      console.log(`[MATCH] Found: ${evName}`);
+      console.log(`[MATCH] Score: ${result.nameResult.score}/2 | Time diff: ${timeMins} mins | Confidence: ${confidence}`);
+      console.log(`[MATCH] Reversed: ${result.nameResult.reversed}`);
 
-      // Detect if teams are reversed between IzentBet and SportyBet
-      const sportyHome = (result.event.homeTeamName || '').toLowerCase();
-      const izentHome = homeTeam.toLowerCase();
-      const izentHomeWord = izentHome.split(/\s+/)[0];
-      const teamsReversed = izentHomeWord.length >= 2 &&
-        !sportyHome.includes(izentHomeWord) &&
-        (result.event.awayTeamName || '').toLowerCase().includes(izentHomeWord);
-      if (teamsReversed) {
-        console.log(`[SPORTYBET] Teams reversed! IzentBet home "${homeTeam}" is SportyBet away "${result.event.awayTeamName}"`);
+      if (!globalBest || result.timeDiff < globalBest.timeDiff) {
+        globalBest = result;
+        globalBestLabel = attempt.label;
       }
-
-      console.log('[REVERSAL CHECK]');
-      console.log('  IzentBet home_team:', homeTeam);
-      console.log('  IzentBet away_team:', awayTeam);
-      console.log('  SportyBet homeTeamName:', result.event.homeTeamName);
-      console.log('  SportyBet awayTeamName:', result.event.awayTeamName);
-      console.log('  sportyHome:', sportyHome);
-      console.log('  izentHome first word:', izentHome.split(' ')[0]);
-      console.log('  teamsReversed:', teamsReversed);
-
-      return {
-        found: true,
-        eventId: result.event.eventId,
-        homeTeamName: result.event.homeTeamName,
-        awayTeamName: result.event.awayTeamName,
-        estimateStartTime: result.event.estimateStartTime,
-        matchedBy: attempt.label,
-        timeMatched: result.timeMatched,
-        teamsReversed
-      };
+      if (confidence === 'high') break;
     }
     await sleep(300);
   }
 
-  return { found: false, keyword: homeTeam, attempted: attempts.length };
+  if (globalBest) {
+    const ev = globalBest.event;
+    const matchedEventName = `${ev.homeTeamName} vs ${ev.awayTeamName}`;
+    const confidence = globalBest.nameResult.score === 2 && globalBest.timeMatched ? 'high'
+                     : globalBest.nameResult.score === 2 ? 'medium' : 'low';
+    console.log(`[SPORTYBET] Matched: ${matchedEventName} → ${ev.eventId}`);
+    if (globalBest.nameResult.reversed) {
+      console.log(`[SPORTYBET] Teams reversed! IzentBet home "${homeTeam}" is SportyBet away "${ev.awayTeamName}"`);
+    }
+    return {
+      found: true,
+      eventId: ev.eventId,
+      homeTeamName: ev.homeTeamName,
+      awayTeamName: ev.awayTeamName,
+      matchedEventName,
+      confidence,
+      estimateStartTime: ev.estimateStartTime,
+      matchedBy: globalBestLabel,
+      timeMatched: globalBest.timeMatched,
+      teamsReversed: globalBest.nameResult.reversed
+    };
+  }
+
+  console.log(`[SPORTYBET] No score-2 match found for ${homeTeam} vs ${awayTeam}`);
+  return { found: false, keyword: homeTeam, attempted: uniqueAttempts.length };
 }
 
 async function createSportyBetCode(selections) {
@@ -937,10 +999,12 @@ app.post('/api/convert', async (req, res) => {
     const sportySelections = [];
 
     for (const sel of selections) {
+      const sport_ = inferSport(sel.market, sel.home_team, sel.away_team);
       const searchResult = await searchWithFallbacks(
         sel.home_team,
         sel.away_team,
-        sel.commence_time
+        sel.commence_time,
+        sport_
       );
 
       let sportyMapping = mapToSportyBet(sel.market, sel.selection, sel.home_team, sel.away_team, searchResult.teamsReversed || false);
@@ -1053,7 +1117,7 @@ app.post('/api/proxy/bet9ja/search', async (req, res) => {
     }
     const homeTeam = keyword;
     const awayTeam = req.body.awayTeam || '';
-    const result = await searchBet9jaWithFallbacks(homeTeam, awayTeam, commenceTime);
+    const result = await searchBet9jaWithFallbacks(homeTeam, awayTeam, commenceTime, req.body.sport);
     res.json(result);
   } catch (err) {
     console.error(`[ERROR] /api/proxy/bet9ja/search: ${err.message}`);
@@ -1108,10 +1172,12 @@ app.post('/api/convert/bet9ja', async (req, res) => {
     const bet9jaSelections = [];
 
     for (const sel of selections) {
+      const sport_ = inferSport(sel.market, sel.home_team, sel.away_team);
       const searchResult = await searchBet9jaWithFallbacks(
         sel.home_team,
         sel.away_team,
-        sel.commence_time
+        sel.commence_time,
+        sport_
       );
 
       const marketKey = searchResult.found
@@ -1211,11 +1277,16 @@ async function convertToSportyBet(izentSelections) {
   const sportySelections = [];
 
   for (const sel of izentSelections) {
-    const searchResult = await searchWithFallbacks(sel.home_team, sel.away_team, sel.commence_time);
+    const sport_ = inferSport(sel.market, sel.home_team, sel.away_team);
+    const searchResult = await searchWithFallbacks(sel.home_team, sel.away_team, sel.commence_time, sport_);
     const sportyMapping = mapToSportyBet(sel.market, sel.selection, sel.home_team, sel.away_team, searchResult.teamsReversed || false);
     delete sportyMapping._uncertain;
 
-    results.push({ found: searchResult.found });
+    results.push({
+      found: searchResult.found,
+      matchedAs: searchResult.matchedEventName || null,
+      confidence: searchResult.confidence || null
+    });
 
     if (searchResult.found) {
       sportySelections.push({ eventId: searchResult.eventId, ...sportyMapping });
@@ -1245,7 +1316,8 @@ async function convertToBet9ja(izentSelections) {
   const bet9jaSelections = [];
 
   for (const sel of izentSelections) {
-    const searchResult = await searchBet9jaWithFallbacks(sel.home_team, sel.away_team, sel.commence_time);
+    const sport_ = inferSport(sel.market, sel.home_team, sel.away_team);
+    const searchResult = await searchBet9jaWithFallbacks(sel.home_team, sel.away_team, sel.commence_time, sport_);
     const marketKey = searchResult.found
       ? mapToBet9ja(sel.market, sel.selection, searchResult.teamsReversed || false)
       : null;
@@ -1253,7 +1325,11 @@ async function convertToBet9ja(izentSelections) {
       ? (searchResult.odds[marketKey] || '1.00')
       : null;
 
-    results.push({ found: searchResult.found });
+    results.push({
+      found: searchResult.found,
+      matchedAs: searchResult.matchedEventName || null,
+      confidence: searchResult.confidence || null
+    });
 
     if (searchResult.found && marketKey) {
       bet9jaSelections.push({
@@ -1351,7 +1427,9 @@ app.post('/api/public/convert', async (req, res) => {
       market: normaliseMarketLabel(sel.market),
       pick: sel.selection,
       odds: sel.odds,
-      converted: results[i].found
+      converted: results[i].found,
+      matchedAs: results[i].matchedAs || null,
+      confidence: results[i].confidence || null
     }));
 
     if (matched === 0) {
