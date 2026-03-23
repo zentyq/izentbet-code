@@ -717,7 +717,7 @@ async function fetchIzentBet(code) {
   return json.data;
 }
 
-async function searchSportyBet(keyword) {
+async function searchSportyBet(keyword, sport) {
   const params = new URLSearchParams({
     keyword,
     offset: '0',
@@ -742,9 +742,61 @@ async function searchSportyBet(keyword) {
   const events = [];
   if (Array.isArray(json.data.live)) events.push(...json.data.live);
   if (Array.isArray(json.data.upcoming)) events.push(...json.data.upcoming);
-  if (Array.isArray(json.data.preMatch)) events.push(...json.data.preMatch);
-  console.log(`[SPORTYBET] Found ${events.length} events for "${keyword}"`);
-  return events;
+  for (const key of Object.keys(json.data)) {
+    if (Array.isArray(json.data[key]) && key !== 'live' && key !== 'upcoming') {
+      events.push(...json.data[key]);
+    }
+  }
+
+  // Filter out eFootball / virtual / simulated events
+  const isFootballSearch = !sport || sport === 'football';
+  const realEvents = events.filter(ev => {
+    // Skip events without team names
+    if (!ev.homeTeamName || !ev.awayTeamName) return false;
+
+    const sportId = ev.sport?.id || '';
+    const sportName = (ev.sport?.name || '').toLowerCase();
+
+    // For football searches: reject non-football sport IDs (sr:sport:1 = Football)
+    if (isFootballSearch && sportId && sportId !== 'sr:sport:1') return false;
+
+    // Reject eFootball / eSoccer / eSports by sport name
+    if (sportName.includes('efootball') ||
+        sportName.includes('esoccer') ||
+        sportName.includes('esports')) return false;
+
+    // Reject fake tournament names
+    const tournamentName = (ev.sport?.category?.tournament?.name || '').toLowerCase();
+    const fakeTournaments = ['gt leagues', 'gt sports league', 'esoccer', 'efootball', 'virtual', 'simulated'];
+    if (fakeTournaments.some(t => tournamentName.includes(t))) return false;
+
+    const home = (ev.homeTeamName || '').toLowerCase();
+    const away = (ev.awayTeamName || '').toLowerCase();
+    const combined = home + ' ' + away;
+
+    // Reject player-name-in-brackets pattern e.g. "Arsenal FC (Eros)"
+    if (/\([A-Za-z]+\)/.test(ev.homeTeamName || '') ||
+        /\([A-Za-z]+\)/.test(ev.awayTeamName || '')) return false;
+
+    // Reject "Z." prefix teams e.g. "Z.Arsenal"
+    if (home.startsWith('z.') || away.startsWith('z.')) return false;
+
+    // Reject known fake keywords in team names
+    const fakePatterns = [
+      'srl', '(eros)', '(banega)', 'efootball', 'esoccer',
+      'virtual', 'zoom', 'gt league', 'gt sports', 'eseries',
+      'cyber', 'simulated'
+    ];
+    return !fakePatterns.some(p => combined.includes(p));
+  });
+
+  console.log(`[SPORTYBET] Total events found: ${events.length}, real after filter: ${realEvents.length} for "${keyword}"`);
+  const rejected = events.filter(ev => !realEvents.includes(ev)).slice(0, 3);
+  rejected.forEach(ev => {
+    console.log(`[SPORTYBET] Rejected: ${ev.homeTeamName} vs ${ev.awayTeamName} | sport: ${ev.sport?.name} | id: ${ev.sport?.id}`);
+  });
+
+  return realEvents;
 }
 
 function findMatchingEvent(events, izentHome, izentAway, commenceTime, sport) {
@@ -810,7 +862,7 @@ async function searchWithFallbacks(homeTeam, awayTeam, commenceTime, sport) {
   for (const attempt of uniqueAttempts) {
     console.log(`[MATCH] IzentBet: ${homeTeam} vs ${awayTeam}`);
     console.log(`[MATCH] Searching SportyBet with: "${attempt.keyword}"`);
-    const events = await searchSportyBet(attempt.keyword);
+    const events = await searchSportyBet(attempt.keyword, sport_);
     if (events.length === 0) {
       await sleep(300);
       continue;
