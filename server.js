@@ -186,167 +186,629 @@ const BET9JA_HEADERS = {
 };
 const BET9JA_TIME_TOLERANCE = 6 * 60 * 60 * 1000; // 6 hours in ms
 
-function mapToSportyBet(market, selection, homeTeam, awayTeam, teamsReversed = false) {
-  const sel = (selection || '').toLowerCase().trim();
-  const mkt = (market || '').toLowerCase().trim();
-  // When teams are reversed, swap IzentBet home/away so side() resolves correctly
-  const home = teamsReversed ? (awayTeam || '').toLowerCase().trim() : (homeTeam || '').toLowerCase().trim();
-  const away = teamsReversed ? (homeTeam || '').toLowerCase().trim() : (awayTeam || '').toLowerCase().trim();
+function mapToSportyBet(market, selection, teamsReversed = false) {
+  const sel = (selection || '').trim();
+  const s = sel.toLowerCase();
 
-  // Helper: is team name the home side or away side?
-  function side(name) {
-    const t = name.toLowerCase().trim();
-    if (away && (away.includes(t) || t.includes(away))) return 'away';
-    if (home && (home.includes(t) || t.includes(home))) return 'home';
-    return 'home';
+  // ─── OUTCOME RESOLVER ───────────────────────
+  function resolveOutcomeId(s, teamsReversed) {
+    const isHome = s === 'home' || s === '1' ||
+      s.match(/^home\s*win$/i) || s.match(/^1\s*win$/i);
+    const isAway = s === 'away' || s === '2' ||
+      s.match(/^away\s*win$/i) || s.match(/^2\s*win$/i);
+    const isDraw = s === 'draw' || s === 'x' ||
+      s === 'tie' || s.match(/^x\s*win$/i);
+    if (isDraw) return '2';
+    if (isHome) return teamsReversed ? '3' : '1';
+    if (isAway) return teamsReversed ? '1' : '3';
+    console.log('[WARN] Unknown 1X2 selection:', sel);
+    return '1';
   }
 
-  // ─── Combo: Over/Under & BTTS ───
-  // SportyBet has no O/U & BTTS combo market → fall back to Over/Under (market 18)
-  const ouBtts = sel.match(/^(over|under)\s+([\d.]+)\s*&\s*btts\s*(yes|no)$/);
-  if (ouBtts) {
-    return { marketId: '18', specifier: `total=${ouBtts[2]}`, outcomeId: ouBtts[1] === 'over' ? '12' : '13' };
+  // ─── 1X2 ────────────────────────────────────
+  if (!market || market === 'h2h' ||
+      market === '1x2' || market === 'match_winner') {
+    return {
+      marketId: '1',
+      specifier: null,
+      outcomeId: resolveOutcomeId(s, teamsReversed)
+    };
   }
 
-  // ─── Combo: Team Win & BTTS  (market 35 = 1X2 & GG/NG) ───
-  const winBtts = sel.match(/^(.+?)\s+win\s*&\s*btts\s*(yes|no)$/);
-  if (winBtts) {
-    const s = side(winBtts[1]);
-    const ids = { 'home-yes': '78', 'home-no': '80', 'away-yes': '86', 'away-no': '88' };
-    return { marketId: '35', specifier: null, outcomeId: ids[`${s}-${winBtts[2]}`] };
+  // ─── 1X2 1UP ────────────────────────────────
+  if (market.match(/1up/i) || s.match(/\(1up\)/i)) {
+    const outcomeId = s.includes('draw') ? '14' :
+      (s.includes('home') || s.includes('1'))
+        ? (teamsReversed ? '15' : '13')
+        : (teamsReversed ? '13' : '15');
+    return { marketId: '60200', specifier: null, outcomeId };
   }
 
-  // ─── Combo: Draw & BTTS  (market 35) ───
-  const drawBtts = sel.match(/^draw\s*&\s*btts\s*(yes|no)$/);
-  if (drawBtts) {
-    return { marketId: '35', specifier: null, outcomeId: drawBtts[1] === 'yes' ? '82' : '84' };
+  // ─── 1X2 2UP ────────────────────────────────
+  if (market.match(/2up/i) || s.match(/\(2up\)/i)) {
+    const outcomeId = s.includes('draw') ? '14' :
+      (s.includes('home') || s.includes('1'))
+        ? (teamsReversed ? '15' : '13')
+        : (teamsReversed ? '13' : '15');
+    return { marketId: '60100', specifier: null, outcomeId };
   }
 
-  // ─── Combo: Team Win & Over/Under  (market 37 = 1X2 & Over/Under) ───
-  const winOu = sel.match(/^(.+?)\s+win\s*&\s*(over|under)\s+([\d.]+)$/);
-  if (winOu) {
-    const s = side(winOu[1]);
-    const ids = { 'home-over': '796', 'home-under': '794', 'away-over': '804', 'away-under': '802' };
-    return { marketId: '37', specifier: `total=${winOu[3]}`, outcomeId: ids[`${s}-${winOu[2]}`] };
+  // ─── OVER/UNDER (all lines) ──────────────────
+  if (market.match(/over.?under|totals|goals/i) ||
+      s.match(/^(over|under)\s*[\d.]+/i)) {
+    const overMatch = s.match(/over\s*([\d.]+)/i);
+    const underMatch = s.match(/under\s*([\d.]+)/i);
+    if (overMatch) return {
+      marketId: '18',
+      specifier: `total=${overMatch[1]}`,
+      outcomeId: '12'
+    };
+    if (underMatch) return {
+      marketId: '18',
+      specifier: `total=${underMatch[1]}`,
+      outcomeId: '13'
+    };
   }
 
-  // ─── Combo: Draw & Over/Under  (market 37) ───
-  const drawOu = sel.match(/^draw\s*&\s*(over|under)\s+([\d.]+)$/);
-  if (drawOu) {
-    return { marketId: '37', specifier: `total=${drawOu[2]}`, outcomeId: drawOu[1] === 'over' ? '800' : '798' };
-  }
-
-  // ─── BTTS (Both Teams To Score)  (market 29) ───
-  if (/^btts\s*(yes|no)$/.test(sel)) {
-    return { marketId: '29', specifier: null, outcomeId: sel.includes('yes') ? '74' : '76' };
-  }
-
-  // ─── Over/Under  (market 18) ───
-  if (mkt === 'totals' || mkt.startsWith('over/under')) {
-    const overMatch = sel.match(/^over\s+([\d.]+)$/);
-    const underMatch = sel.match(/^under\s+([\d.]+)$/);
-    if (overMatch) return { marketId: '18', specifier: `total=${overMatch[1]}`, outcomeId: '12' };
-    if (underMatch) return { marketId: '18', specifier: `total=${underMatch[1]}`, outcomeId: '13' };
-    const lineMatch = mkt.match(/([\d.]+)/);
-    if (lineMatch) {
-      return { marketId: '18', specifier: `total=${lineMatch[1]}`, outcomeId: sel.includes('over') ? '12' : '13' };
+  // ─── DOUBLE CHANCE ───────────────────────────
+  if (market.match(/double.?chance/i) ||
+      s.match(/home or|draw or|or draw|or away/i)) {
+    if (s.match(/home.*(or|&|and).*draw/i) ||
+        s === '1x') {
+      return {
+        marketId: '10', specifier: null,
+        outcomeId: teamsReversed ? '11' : '9'
+      };
+    }
+    if (s.match(/draw.*(or|&|and).*away/i) ||
+        s === 'x2') {
+      return {
+        marketId: '10', specifier: null,
+        outcomeId: teamsReversed ? '9' : '11'
+      };
+    }
+    if (s.match(/home.*(or|&|and).*away/i) ||
+        s === '12') {
+      return { marketId: '10', specifier: null, outcomeId: '12' };
     }
   }
-  // Selection-only Over/Under (no market field)
-  const overOnly = sel.match(/^over\s+([\d.]+)$/);
-  if (overOnly) return { marketId: '18', specifier: `total=${overOnly[1]}`, outcomeId: '12' };
-  const underOnly = sel.match(/^under\s+([\d.]+)$/);
-  if (underOnly) return { marketId: '18', specifier: `total=${underOnly[1]}`, outcomeId: '13' };
 
-  // ─── 1X2 outcome resolver — handles ALL IzentBet selection formats ───
-  function resolveOutcomeId(s, reversed = false) {
-    const t = (s || '').toLowerCase().trim();
-
-    // Home variations
-    const isHome = t === 'home' || t === '1' ||
-                   /^home\s*win$/i.test(t) ||
-                   /^1\s*win$/i.test(t);
-
-    // Away variations
-    const isAway = t === 'away' || t === '2' ||
-                   /^away\s*win$/i.test(t) ||
-                   /^2\s*win$/i.test(t);
-
-    // Draw variations
-    const isDraw = t === 'draw' || t === 'x' || t === 'tie' ||
-                   /^draw\s*win$/i.test(t) ||
-                   /^x\s*win$/i.test(t);
-
-    if (isDraw) return '2';
-    if (isHome) return reversed ? '3' : '1';
-    if (isAway) return reversed ? '1' : '3';
-
-    // Team-name win: "Barcelona win" etc. — checked AFTER home/away/draw
-    const teamWin = t.match(/^(.+?)\s+win$/);
-    if (teamWin) return side(teamWin[1]) === 'home' ? '1' : '3';
-
-    console.log('[WARN] Unknown selection format:', s);
-    return null;
+  // ─── DRAW NO BET ─────────────────────────────
+  if (market.match(/draw.?no.?bet/i) ||
+      s.match(/draw no bet/i)) {
+    return {
+      marketId: '37', specifier: null,
+      outcomeId: (s.includes('home') || s === '1')
+        ? (teamsReversed ? '3' : '1')
+        : (teamsReversed ? '1' : '3')
+    };
   }
 
-  const outcomeId = resolveOutcomeId(sel, teamsReversed);
-  if (outcomeId) {
-    return { marketId: '1', specifier: null, outcomeId };
+  // ─── GOAL / NO GOAL (GG/NG) ──────────────────
+  if (market.match(/gg.?ng|goal.?no.?goal|both.?teams/i)) {
+    const isYes = s === 'yes' || s === 'gg' ||
+                  s === 'both teams score';
+    return {
+      marketId: '29', specifier: null,
+      outcomeId: isYes ? '74' : '76'
+    };
   }
 
-  // ─── Unrecognised — mark uncertain for AI fallback ───
-  return { marketId: '1', specifier: null, outcomeId: '1', _uncertain: true };
+  // ─── CORRECT SCORE ───────────────────────────
+  if (market.match(/correct.?score/i)) {
+    const scoreMap = {
+      '1:0':'68','2:0':'71','2:1':'76','3:0':'74',
+      '3:1':'79','3:2':'84','4:0':'77','4:1':'82',
+      '4:2':'87','4:3':'92','0:0':'67','1:1':'70',
+      '2:2':'75','3:3':'80','4:4':'85','0:1':'69',
+      '0:2':'72','0:3':'75','0:4':'78','1:2':'77',
+      '1:3':'82','2:3':'83','1:4':'86','2:4':'87',
+      '3:4':'92'
+    };
+    const outcomeId = scoreMap[sel] || '96';
+    return { marketId: '41', specifier: null, outcomeId };
+  }
+
+  // ─── HALF TIME / FULL TIME ───────────────────
+  if (market.match(/half.?time.*full.?time|ht.?ft/i)) {
+    const htftMap = {
+      'home/home':'3', 'home/draw':'4', 'home/away':'5',
+      'draw/home':'6', 'draw/draw':'7', 'draw/away':'8',
+      'away/home':'9', 'away/draw':'10', 'away/away':'11'
+    };
+    const key = s.replace(/\s+/g, '').toLowerCase()
+                 .replace('/', '/');
+    return {
+      marketId: '53', specifier: null,
+      outcomeId: htftMap[key] || '7'
+    };
+  }
+
+  // ─── ODD / EVEN ──────────────────────────────
+  if (market.match(/odd.?even/i)) {
+    return {
+      marketId: '70', specifier: null,
+      outcomeId: s.includes('odd') ? '534' : '536'
+    };
+  }
+
+  // ─── ASIAN HANDICAP ──────────────────────────
+  if (market.match(/asian.?handicap/i)) {
+    const hcpMatch = s.match(/([+-]?\d+\.?\d*)/);
+    const hcp = hcpMatch ? hcpMatch[1] : '0';
+    const isHome = s.includes('home') || s.includes('(-)');
+    return {
+      marketId: '114',
+      specifier: `hcp=${isHome ? '-' : '+'}${Math.abs(parseFloat(hcp))}`,
+      outcomeId: isHome
+        ? (teamsReversed ? '4' : '1714')
+        : (teamsReversed ? '1714' : '4')
+    };
+  }
+
+  // ─── HANDICAP (European) ─────────────────────
+  if (market.match(/^handicap/i)) {
+    const hcpMatch = market.match(/([+-]?\d+):([+-]?\d+)/);
+    if (hcpMatch) {
+      const homeHcp = parseInt(hcpMatch[1]);
+      const awayHcp = parseInt(hcpMatch[2]);
+      return {
+        marketId: '14',
+        specifier: homeHcp > 0
+          ? `hcp=${homeHcp}:0`
+          : `hcp=0:${awayHcp}`,
+        outcomeId: resolveOutcomeId(s, teamsReversed)
+      };
+    }
+  }
+
+  // ─── 1ST HALF MARKETS ────────────────────────
+  if (market.match(/^1st half|^first half|^1h/i)) {
+    const subMarket = market.replace(/^1st half\s*[-–]?\s*/i, '').trim();
+    const base = mapToSportyBet(subMarket, selection, teamsReversed);
+    const halfMarketMap = {
+      '1': '60', '10': '61', '18': '62',
+      '29': '63', '37': '64', '41': '65',
+      '70': '66', '14': '67'
+    };
+    return {
+      ...base,
+      marketId: halfMarketMap[base.marketId] || base.marketId
+    };
+  }
+
+  // ─── 2ND HALF MARKETS ────────────────────────
+  if (market.match(/^2nd half|^second half|^2h/i)) {
+    const subMarket = market.replace(/^2nd half\s*[-–]?\s*/i, '').trim();
+    const base = mapToSportyBet(subMarket, selection, teamsReversed);
+    const halfMarketMap = {
+      '1': '68', '10': '69', '18': '70',
+      '29': '71', '37': '72', '41': '73',
+      '70': '74', '14': '75'
+    };
+    return {
+      ...base,
+      marketId: halfMarketMap[base.marketId] || base.marketId
+    };
+  }
+
+  // ─── HOME TEAM OVER/UNDER ────────────────────
+  if (market.match(/home.?team.?over.?under/i)) {
+    const overMatch = s.match(/over\s*([\d.]+)/i);
+    const underMatch = s.match(/under\s*([\d.]+)/i);
+    const line = overMatch?.[1] || underMatch?.[1] || '1.5';
+    return {
+      marketId: '19',
+      specifier: `total=${line}`,
+      outcomeId: overMatch ? '12' : '13'
+    };
+  }
+
+  // ─── AWAY TEAM OVER/UNDER ────────────────────
+  if (market.match(/away.?team.?over.?under/i)) {
+    const overMatch = s.match(/over\s*([\d.]+)/i);
+    const underMatch = s.match(/under\s*([\d.]+)/i);
+    const line = overMatch?.[1] || underMatch?.[1] || '1.5';
+    return {
+      marketId: '20',
+      specifier: `total=${line}`,
+      outcomeId: overMatch ? '12' : '13'
+    };
+  }
+
+  // ─── EXACT GOALS ────────────────────────────
+  if (market.match(/exact.?goals/i)) {
+    const exactGoalOutcomeMap = {
+      '0':'88','1':'89','2':'90','3':'91',
+      '4':'92','5':'93','6+':'94'
+    };
+    return {
+      marketId: '8',
+      specifier: null,
+      outcomeId: exactGoalOutcomeMap[sel] || '90'
+    };
+  }
+
+  // ─── WINNING MARGIN ──────────────────────────
+  if (market.match(/winning.?margin/i)) {
+    const marginMap = {
+      'home by 1': teamsReversed ? '212' : '211',
+      'home by 2': teamsReversed ? '214' : '213',
+      'home by 3+': teamsReversed ? '216' : '215',
+      'away by 1': teamsReversed ? '211' : '212',
+      'away by 2': teamsReversed ? '213' : '214',
+      'away by 3+': teamsReversed ? '215' : '216',
+      'draw': '217'
+    };
+    return {
+      marketId: '186', specifier: null,
+      outcomeId: marginMap[s] || '217'
+    };
+  }
+
+  // ─── CLEAN SHEET ────────────────────────────
+  if (market.match(/clean.?sheet/i)) {
+    const isHome = market.match(/home/i);
+    return {
+      marketId: isHome ? '21' : '22',
+      specifier: null,
+      outcomeId: s === 'yes' ? '74' : '76'
+    };
+  }
+
+  // ─── BOTH TEAMS TO SCORE IN BOTH HALVES ─────
+  if (market.match(/both.?halves/i) &&
+      market.match(/score|gg/i)) {
+    return {
+      marketId: '547', specifier: null,
+      outcomeId: s === 'yes' ? '74' : '76'
+    };
+  }
+
+  // ─── 1X2 + OVER/UNDER COMBO ─────────────────
+  if (market.match(/1x2.*over.?under|over.?under.*1x2/i)) {
+    const lineMatch = market.match(/([\d.]+)/);
+    const line = lineMatch ? lineMatch[1] : '2.5';
+    const result = s.includes('home') ? '1' :
+                   s.includes('draw') ? '2' : '3';
+    const overUnder = s.includes('over') ? 'O' : 'U';
+    return {
+      marketId: '230',
+      specifier: `total=${line}`,
+      outcomeId: `${result}${overUnder}`
+    };
+  }
+
+  // ─── DEFAULT FALLBACK ────────────────────────
+  console.log('[WARN] Unmapped market:', market,
+              'selection:', selection);
+  return {
+    marketId: '1', specifier: null,
+    outcomeId: resolveOutcomeId(s, teamsReversed)
+  };
 }
 
 // ─── Bet9ja Selection Mapper ─────────────────────────────────────
 
 function mapToBet9ja(market, selection, teamsReversed = false) {
-  const sel = (selection || '').toLowerCase().trim();
+  const sel = (selection || '').trim();
+  const s = sel.toLowerCase();
 
-  // Over/Under
-  const overMatch = sel.match(/over\s*([\d.]+)/i);
-  const underMatch = sel.match(/under\s*([\d.]+)/i);
-  if (overMatch) return `S_OU@${overMatch[1]}_O`;
-  if (underMatch) return `S_OU@${underMatch[1]}_U`;
-
-  // Both Teams Score
-  if (market === 'btts') {
-    if (sel === 'yes') return 'S_GGNG_Y';
-    if (sel === 'no')  return 'S_GGNG_N';
-  }
-
-  // Double Chance
-  if (market === 'double_chance') {
-    if (sel === '1x') return 'S_DC_1X';
-    if (sel === 'x2') return 'S_DC_X2';
-    if (sel === '12') return 'S_DC_12';
-  }
-
-  // 1X2 — handle all formats + team reversal
-  function resolveSign(s, reversed) {
-    const t = (s || '').toLowerCase().trim();
-
-    const isHome = t === 'home' || t === '1' ||
-                   /^1\s*win$/i.test(t) ||
-                   /^home\s*win$/i.test(t);
-
-    const isAway = t === 'away' || t === '2' ||
-                   /^2\s*win$/i.test(t) ||
-                   /^away\s*win$/i.test(t);
-
-    const isDraw = t === 'draw' || t === 'x' || t === 'tie' ||
-                   /^x\s*win$/i.test(t);
-
+  // ─── SIGN RESOLVER ───────────────────────────
+  function resolveSign(s, teamsReversed) {
+    const isHome = s === 'home' || s === '1' ||
+      s.match(/^home\s*win$/i) || s.match(/^1\s*win$/i);
+    const isAway = s === 'away' || s === '2' ||
+      s.match(/^away\s*win$/i) || s.match(/^2\s*win$/i);
+    const isDraw = s === 'draw' || s === 'x' ||
+      s === 'tie' || s.match(/^x\s*win$/i);
     if (isDraw) return 'X';
-    if (isHome) return reversed ? '2' : '1';
-    if (isAway) return reversed ? '1' : '2';
-
-    console.log('[WARN] Unknown selection format:', s);
+    if (isHome) return teamsReversed ? '2' : '1';
+    if (isAway) return teamsReversed ? '1' : '2';
+    console.log('[WARN] Unknown Bet9ja selection:', sel);
     return '1';
   }
 
-  const sign = resolveSign(sel, teamsReversed);
-  return `S_1X2_${sign}`;
+  // ─── 1X2 ────────────────────────────────────
+  if (!market || market === 'h2h' ||
+      market === '1x2' || market === 'match_winner') {
+    const sign = resolveSign(s, teamsReversed);
+    return { marketKey: `S_1X2_${sign}`, sign };
+  }
+
+  // ─── 1X2 1UP ────────────────────────────────
+  if (market.match(/1up/i) || s.match(/\(1up\)/i)) {
+    const sign = resolveSign(s, teamsReversed);
+    const signMap = {'1':'11','X':'X1','2':'21'};
+    return {
+      marketKey: `S_1X21_${signMap[sign] || '11'}`,
+      sign: signMap[sign]
+    };
+  }
+
+  // ─── 1X2 2UP ────────────────────────────────
+  if (market.match(/2up/i) || s.match(/\(2up\)/i)) {
+    const sign = resolveSign(s, teamsReversed);
+    const signMap = {'1':'12','X':'X2','2':'22'};
+    return {
+      marketKey: `S_1X22_${signMap[sign] || '12'}`,
+      sign: signMap[sign]
+    };
+  }
+
+  // ─── OVER/UNDER (all lines) ──────────────────
+  if (market.match(/over.?under|totals|goals/i) ||
+      s.match(/^(over|under)\s*[\d.]+/i)) {
+    const overMatch = s.match(/over\s*([\d.]+)/i);
+    const underMatch = s.match(/under\s*([\d.]+)/i);
+    if (overMatch) return {
+      marketKey: `S_OU@${overMatch[1]}_O`,
+      sign: 'O'
+    };
+    if (underMatch) return {
+      marketKey: `S_OU@${underMatch[1]}_U`,
+      sign: 'U'
+    };
+  }
+
+  // ─── DOUBLE CHANCE ───────────────────────────
+  if (market.match(/double.?chance/i) ||
+      s.match(/home or|draw or|or draw|or away/i)) {
+    if (s.match(/home.*(or|&).*draw/i) || s === '1x') {
+      return {
+        marketKey: teamsReversed ? 'S_DC_X2' : 'S_DC_1X',
+        sign: teamsReversed ? 'X2' : '1X'
+      };
+    }
+    if (s.match(/draw.*(or|&).*away/i) || s === 'x2') {
+      return {
+        marketKey: teamsReversed ? 'S_DC_1X' : 'S_DC_X2',
+        sign: teamsReversed ? '1X' : 'X2'
+      };
+    }
+    if (s.match(/home.*(or|&).*away/i) || s === '12') {
+      return { marketKey: 'S_DC_12', sign: '12' };
+    }
+  }
+
+  // ─── DRAW NO BET ─────────────────────────────
+  if (market.match(/draw.?no.?bet/i)) {
+    const sign = (s.includes('home') || s === '1')
+      ? (teamsReversed ? '2' : '1')
+      : (teamsReversed ? '1' : '2');
+    return { marketKey: `S_DNB_${sign}`, sign };
+  }
+
+  // ─── GOAL / NO GOAL ──────────────────────────
+  if (market.match(/gg.?ng|goal.?no.?goal|both.?teams/i)) {
+    const isYes = s === 'yes' || s === 'gg';
+    return {
+      marketKey: isYes ? 'S_GGNG_Y' : 'S_GGNG_N',
+      sign: isYes ? 'Y' : 'N'
+    };
+  }
+
+  // ─── ODD / EVEN ──────────────────────────────
+  if (market.match(/^odd.?even/i)) {
+    return {
+      marketKey: s.includes('odd') ? 'S_OE_OD' : 'S_OE_EV',
+      sign: s.includes('odd') ? 'OD' : 'EV'
+    };
+  }
+
+  // ─── CORRECT SCORE ───────────────────────────
+  if (market.match(/correct.?score/i)) {
+    const normalized = sel.replace(/\s+/g, '');
+    return {
+      marketKey: `S_CS_${normalized}`,
+      sign: normalized
+    };
+  }
+
+  // ─── HALF TIME / FULL TIME ───────────────────
+  if (market.match(/half.?time.*full.?time|ht.?ft/i)) {
+    const htftSignMap = {
+      'home/home':'11','home/draw':'1X','home/away':'12',
+      'draw/home':'X1','draw/draw':'XX','draw/away':'X2',
+      'away/home':'21','away/draw':'2X','away/away':'22'
+    };
+    const key = s.replace(/\s+/g, '').toLowerCase();
+    const sign = htftSignMap[key] || 'XX';
+    return { marketKey: `S_HTFT_${sign}`, sign };
+  }
+
+  // ─── EXACT GOALS ────────────────────────────
+  if (market.match(/exact.?goals/i)) {
+    return {
+      marketKey: `S_EG_${sel}`,
+      sign: sel
+    };
+  }
+
+  // ─── WINNING MARGIN ──────────────────────────
+  if (market.match(/winning.?margin/i)) {
+    const marginSignMap = {
+      'home by 1': teamsReversed ? 'A1' : 'H1',
+      'home by 2': teamsReversed ? 'A2' : 'H2',
+      'home by 3+': teamsReversed ? 'A3' : 'H3',
+      'away by 1': teamsReversed ? 'H1' : 'A1',
+      'away by 2': teamsReversed ? 'H2' : 'A2',
+      'away by 3+': teamsReversed ? 'H3' : 'A3',
+      'draw': 'D'
+    };
+    const sign = marginSignMap[s] || 'D';
+    return { marketKey: `S_WM_${sign}`, sign };
+  }
+
+  // ─── CLEAN SHEET ────────────────────────────
+  if (market.match(/clean.?sheet/i)) {
+    const isHome = market.match(/home/i);
+    const sign = s === 'yes' ? 'Y' : 'N';
+    return {
+      marketKey: isHome ? `S_HCS_${sign}` : `S_ACS_${sign}`,
+      sign
+    };
+  }
+
+  // ─── HOME/AWAY WIN TO NIL ────────────────────
+  if (market.match(/win.?to.?nil/i)) {
+    const isHome = market.match(/home/i);
+    const sign = s === 'yes' ? 'Y' : 'N';
+    return {
+      marketKey: isHome ? `S_HWN_${sign}` : `S_AWN_${sign}`,
+      sign
+    };
+  }
+
+  // ─── 1ST HALF MARKETS ────────────────────────
+  if (market.match(/^1st half|^first half/i)) {
+    const subMarket = market
+      .replace(/^1st half\s*[-–]?\s*/i, '').trim();
+    const base = mapToBet9ja(subMarket, selection, teamsReversed);
+    return {
+      marketKey: base.marketKey.replace(/^S_/, 'S_1T_'),
+      sign: base.sign
+    };
+  }
+
+  // ─── 2ND HALF MARKETS ────────────────────────
+  if (market.match(/^2nd half|^second half/i)) {
+    const subMarket = market
+      .replace(/^2nd half\s*[-–]?\s*/i, '').trim();
+    const base = mapToBet9ja(subMarket, selection, teamsReversed);
+    return {
+      marketKey: base.marketKey.replace(/^S_/, 'S_2T_'),
+      sign: base.sign
+    };
+  }
+
+  // ─── ASIAN HANDICAP ──────────────────────────
+  if (market.match(/asian.?handicap/i)) {
+    const hcpMatch = market.match(/([+-]?\d+\.?\d*)/);
+    const hcp = hcpMatch ? parseFloat(hcpMatch[1]) : 0;
+    const isHome = s.includes('home');
+    const sign = isHome
+      ? (teamsReversed ? `AH${hcp}` : `AH${hcp}`)
+      : (teamsReversed ? `AH${hcp}` : `AH${-hcp}`);
+    return {
+      marketKey: `S_AH_${isHome ? 'H' : 'A'}${Math.abs(hcp)}`,
+      sign
+    };
+  }
+
+  // ─── HANDICAP (European) ─────────────────────
+  if (market.match(/^handicap/i)) {
+    const hcpMatch = market.match(/([+-]?\d+)/);
+    const hcp = hcpMatch ? hcpMatch[1] : '-1';
+    const sign = resolveSign(s, teamsReversed);
+    return {
+      marketKey: `S_HCP${hcp}_${sign}`,
+      sign
+    };
+  }
+
+  // ─── HOME OVER/UNDER ─────────────────────────
+  if (market.match(/home.?(team.?)?over.?under/i)) {
+    const overMatch = s.match(/over\s*([\d.]+)/i);
+    const underMatch = s.match(/under\s*([\d.]+)/i);
+    const line = overMatch?.[1] || underMatch?.[1] || '1.5';
+    const side = overMatch ? 'O' : 'U';
+    return {
+      marketKey: `S_HOU@${line}_${side}`,
+      sign: side
+    };
+  }
+
+  // ─── AWAY OVER/UNDER ─────────────────────────
+  if (market.match(/away.?(team.?)?over.?under/i)) {
+    const overMatch = s.match(/over\s*([\d.]+)/i);
+    const underMatch = s.match(/under\s*([\d.]+)/i);
+    const line = overMatch?.[1] || underMatch?.[1] || '1.5';
+    const side = overMatch ? 'O' : 'U';
+    return {
+      marketKey: `S_AOU@${line}_${side}`,
+      sign: side
+    };
+  }
+
+  // ─── GG/NG 2+ ────────────────────────────────
+  if (market.match(/gg.?ng.*2\+|2\+.*gg.?ng/i)) {
+    const isGG = s === 'gg' || s === 'yes';
+    return {
+      marketKey: isGG ? 'S_GGNG2_Y' : 'S_GGNG2_N',
+      sign: isGG ? 'Y' : 'N'
+    };
+  }
+
+  // ─── SCORE IN X MINUTES ──────────────────────
+  if (market.match(/score in \d+ minutes/i)) {
+    const minMatch = market.match(/(\d+)/);
+    const min = minMatch ? minMatch[1] : '20';
+    const sign = s === 'yes' ? 'Y' : 'N';
+    return {
+      marketKey: `S_SIN${min}_${sign}`,
+      sign
+    };
+  }
+
+  // ─── FIRST TEAM TO SCORE ─────────────────────
+  if (market.match(/first team to score|1st goal|first goal/i)) {
+    if (s.includes('home') || s === '1') {
+      return {
+        marketKey: teamsReversed ? 'S_FTS_2' : 'S_FTS_1',
+        sign: teamsReversed ? '2' : '1'
+      };
+    }
+    if (s.includes('away') || s === '2') {
+      return {
+        marketKey: teamsReversed ? 'S_FTS_1' : 'S_FTS_2',
+        sign: teamsReversed ? '1' : '2'
+      };
+    }
+    return { marketKey: 'S_FTS_NG', sign: 'NG' };
+  }
+
+  // ─── HOME/AWAY SCORE YES/NO ──────────────────
+  if (market.match(/home.?to.?score|home.?score/i)) {
+    return {
+      marketKey: s === 'yes' ? 'S_HTS_Y' : 'S_HTS_N',
+      sign: s === 'yes' ? 'Y' : 'N'
+    };
+  }
+  if (market.match(/away.?to.?score|away.?score/i)) {
+    return {
+      marketKey: s === 'yes' ? 'S_ATS_Y' : 'S_ATS_N',
+      sign: s === 'yes' ? 'Y' : 'N'
+    };
+  }
+
+  // ─── 1X2 + OVER/UNDER COMBO ─────────────────
+  if (market.match(/1x2.*over.?under|1x2.*\+.*ou/i)) {
+    const lineMatch = market.match(/([\d.]+)/);
+    const line = lineMatch ? lineMatch[1] : '2.5';
+    const sign = resolveSign(s.split('&')[0].trim(), teamsReversed);
+    const ou = s.includes('over') ? 'O' : 'U';
+    return {
+      marketKey: `S_1X2OU@${line}_${sign}${ou}`,
+      sign: `${sign}${ou}`
+    };
+  }
+
+  // ─── 1X2 + GG/NG COMBO ──────────────────────
+  if (market.match(/1x2.*gg.?ng|1x2.*goal/i)) {
+    const sign = resolveSign(s.split('&')[0].trim(), teamsReversed);
+    const gg = s.includes('yes') || s.includes('gg') ? 'Y' : 'N';
+    return {
+      marketKey: `S_1X2GG_${sign}${gg}`,
+      sign: `${sign}${gg}`
+    };
+  }
+
+  // ─── DEFAULT FALLBACK ────────────────────────
+  console.log('[WARN] Unmapped Bet9ja market:', market,
+              'selection:', selection);
+  const sign = resolveSign(s, teamsReversed);
+  return { marketKey: `S_1X2_${sign}`, sign };
 }
 
 // ─── Market Label Normaliser ─────────────────────────────────────
@@ -1077,26 +1539,9 @@ app.post('/api/convert', async (req, res) => {
         sport_
       );
 
-      let sportyMapping = mapToSportyBet(sel.market, sel.selection, sel.home_team, sel.away_team, searchResult.teamsReversed || false);
+      let sportyMapping = mapToSportyBet(sel.market, sel.selection, searchResult.teamsReversed || false);
       console.log('[SELECTION]', sel.home_team, 'vs', sel.away_team, '→ raw selection:', sel.selection, '→ outcomeId:', sportyMapping.outcomeId);
       let resolvedBy = 'static';
-
-      // AI fallback: if static mapper fell through to default 1X2 but the
-      // selection doesn't look like a simple home/draw/away, ask AI
-      if (sportyMapping._uncertain && searchResult.found && aiEnabled) {
-        console.log(`[AI] Static mapper uncertain for "${sel.selection}" — trying AI`);
-        const eventMarkets = await fetchSportyBetEventMarkets(searchResult.eventId);
-        if (eventMarkets.length > 0) {
-          const aiResult = await aiResolveMarket(
-            sel.selection, sel.market, eventMarkets, sel.home_team, sel.away_team, aiProvider
-          );
-          if (aiResult) {
-            sportyMapping = aiResult;
-            resolvedBy = 'ai';
-          }
-        }
-      }
-      delete sportyMapping._uncertain;
 
       const entry = {
         izentbet: {
@@ -1251,9 +1696,10 @@ app.post('/api/convert/bet9ja', async (req, res) => {
         sport_
       );
 
-      const marketKey = searchResult.found
+      const bet9jaMapping = searchResult.found
         ? mapToBet9ja(sel.market, sel.selection, searchResult.teamsReversed || false)
         : null;
+      const marketKey = bet9jaMapping ? bet9jaMapping.marketKey : null;
 
       const oddsValue = searchResult.found && marketKey
         ? (searchResult.odds[marketKey] || '1.00')
@@ -1350,8 +1796,7 @@ async function convertToSportyBet(izentSelections) {
   for (const sel of izentSelections) {
     const sport_ = inferSport(sel.market, sel.home_team, sel.away_team);
     const searchResult = await searchWithFallbacks(sel.home_team, sel.away_team, sel.commence_time, sport_);
-    const sportyMapping = mapToSportyBet(sel.market, sel.selection, sel.home_team, sel.away_team, searchResult.teamsReversed || false);
-    delete sportyMapping._uncertain;
+    const sportyMapping = mapToSportyBet(sel.market, sel.selection, searchResult.teamsReversed || false);
 
     results.push({
       found: searchResult.found,
@@ -1389,9 +1834,10 @@ async function convertToBet9ja(izentSelections) {
   for (const sel of izentSelections) {
     const sport_ = inferSport(sel.market, sel.home_team, sel.away_team);
     const searchResult = await searchBet9jaWithFallbacks(sel.home_team, sel.away_team, sel.commence_time, sport_);
-    const marketKey = searchResult.found
+    const bet9jaMapping = searchResult.found
       ? mapToBet9ja(sel.market, sel.selection, searchResult.teamsReversed || false)
       : null;
+    const marketKey = bet9jaMapping ? bet9jaMapping.marketKey : null;
     const oddsValue = searchResult.found && marketKey
       ? (searchResult.odds[marketKey] || '1.00')
       : null;
