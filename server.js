@@ -190,6 +190,17 @@ function mapToSportyBet(market, selection, teamsReversed = false) {
   const sel = (selection || '').trim();
   const s = sel.toLowerCase();
 
+  // ─── INFER MARKET FROM SELECTION TEXT ────────
+  if (!market) {
+    if (/^(over|under)\s*[\d.]+/i.test(s)) market = 'over_under';
+    else if (/home or draw|draw or home|home or away|draw or away|away or draw|away or home|\(1x\)|\(x2\)|\(12\)/i.test(s)) market = 'double_chance';
+    else if (/both.?teams.?score|^gg$|^ng$/i.test(s)) market = 'gg_ng';
+    else if (/draw.?no.?bet/i.test(s)) market = 'draw_no_bet';
+    else if (/^\d+:\d+$/.test(sel)) market = 'correct_score';
+    else if (/^(odd|even)$/i.test(s)) market = 'odd_even';
+    else market = '1x2';
+  }
+
   // ─── OUTCOME RESOLVER ───────────────────────
   function resolveOutcomeId(s, teamsReversed) {
     const isHome = s === 'home' || s === '1' ||
@@ -493,6 +504,17 @@ function mapToSportyBet(market, selection, teamsReversed = false) {
 function mapToBet9ja(market, selection, teamsReversed = false) {
   const sel = (selection || '').trim();
   const s = sel.toLowerCase();
+
+  // ─── INFER MARKET FROM SELECTION TEXT ────────
+  if (!market) {
+    if (/^(over|under)\s*[\d.]+/i.test(s)) market = 'over_under';
+    else if (/home or draw|draw or home|home or away|draw or away|away or draw|away or home|\(1x\)|\(x2\)|\(12\)/i.test(s)) market = 'double_chance';
+    else if (/both.?teams.?score|^gg$|^ng$/i.test(s)) market = 'gg_ng';
+    else if (/draw.?no.?bet/i.test(s)) market = 'draw_no_bet';
+    else if (/^\d+:\d+$/.test(sel)) market = 'correct_score';
+    else if (/^(odd|even)$/i.test(s)) market = 'odd_even';
+    else market = '1x2';
+  }
 
   // ─── SIGN RESOLVER ───────────────────────────
   function resolveSign(s, teamsReversed) {
