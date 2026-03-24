@@ -127,10 +127,18 @@ function scoreName(sportyHome, sportyAway, izentHome, izentAway) {
   const iHomeWord = firstWord(izentHome);
   const iAwayWord = firstWord(izentAway);
 
-  const homeMatch = sHome.includes(iHomeWord) || iHome.includes(firstWord(sportyHome));
-  const awayMatch = sAway.includes(iAwayWord) || iAway.includes(firstWord(sportyAway));
-  const homeMatchRev = sAway.includes(iHomeWord) || iHome.includes(firstWord(sportyAway));
-  const awayMatchRev = sHome.includes(iAwayWord) || iAway.includes(firstWord(sportyHome));
+  // Reject if either platform has empty team names (outright/futures events)
+  if (!sHome || !sAway || !iHome || !iAway) return { score: 0, reversed: false };
+  if (!iHomeWord || !iAwayWord) return { score: 0, reversed: false };
+
+  const sHomeWord = firstWord(sportyHome);
+  const sAwayWord = firstWord(sportyAway);
+  if (!sHomeWord || !sAwayWord) return { score: 0, reversed: false };
+
+  const homeMatch = sHome.includes(iHomeWord) || iHome.includes(sHomeWord);
+  const awayMatch = sAway.includes(iAwayWord) || iAway.includes(sAwayWord);
+  const homeMatchRev = sAway.includes(iHomeWord) || iHome.includes(sAwayWord);
+  const awayMatchRev = sHome.includes(iAwayWord) || iAway.includes(sHomeWord);
 
   if (homeMatch && awayMatch) return { score: 2, reversed: false };
   if (homeMatchRev && awayMatchRev) return { score: 2, reversed: true };
@@ -1059,7 +1067,7 @@ async function createBet9jaCode(selections) {
   });
 
   const text = await res.text();
-  console.log(`[BET9JA] BookABetV2 response: status=${res.status} body=${text.substring(0, 500)}`);
+  console.log(`[BET9JA] BookABetV2 response: status=${res.status} body=${text.substring(0, 2000)}`);
 
   if (!res.ok) {
     throw new Error(`Bet9ja BookABetV2 returned ${res.status}: ${text}`);
@@ -1861,16 +1869,18 @@ async function convertToBet9ja(izentSelections) {
       : null;
     const marketKey = bet9jaMapping ? bet9jaMapping.marketKey : null;
     const oddsValue = searchResult.found && marketKey
-      ? (searchResult.odds[marketKey] || '1.00')
+      ? (searchResult.odds[marketKey] || null)
       : null;
 
+    const marketFound = searchResult.found && marketKey && oddsValue;
+
     results.push({
-      found: searchResult.found,
-      matchedAs: searchResult.matchedEventName || null,
-      confidence: searchResult.confidence || null
+      found: !!marketFound,
+      matchedAs: searchResult.found ? (searchResult.matchedEventName || null) : null,
+      confidence: searchResult.found ? (searchResult.confidence || null) : null
     });
 
-    if (searchResult.found && marketKey) {
+    if (marketFound) {
       bet9jaSelections.push({
         eventId: searchResult.eventId,
         marketKey,
